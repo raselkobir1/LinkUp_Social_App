@@ -1,0 +1,408 @@
+Project Name
+
+LinkUp
+
+Tagline: Connect. Share. Chat.
+
+Technology Stack
+Backend
+.NET 8 Web API
+C#
+PostgreSQL
+Entity Framework Core
+SignalR
+JWT Authentication
+ASP.NET Identity
+Repository Pattern
+Unit of Work Pattern
+Modular Monolith Architecture
+FluentValidation
+AutoMapper
+Redis (optional)
+Serilog
+Docker
+Swagger
+Background Services
+Hangfire (optional)
+Cloudinary (media upload)
+Architecture
+Controller
+      │
+      ▼
+Manager (Business Logic)
+      │
+      ▼
+Repository
+      │
+      ▼
+Unit Of Work
+      │
+      ▼
+EF Core
+      │
+      ▼
+PostgreSQL
+
+Do NOT use
+
+MediatR
+CQRS
+Event Sourcing
+Frontend
+Angular 20+
+Angular Material
+Bootstrap/Tailwind
+SignalR
+RxJS
+JWT
+Route Guard
+Lazy Loading
+Modular Monolith Structure
+LinkUp
+
+├── BuildingBlocks
+│
+├── Modules
+│   │
+│   ├── Identity
+│   ├── UserProfile
+│   ├── Friend
+│   ├── Post
+│   ├── Comment
+│   ├── Reaction
+│   ├── Chat
+│   ├── Notification
+│   ├── VideoCall
+│   ├── Media
+│   ├── Search
+│   └── Admin
+│
+├── SharedKernel
+│
+└── API
+Feature List
+1. Authentication
+Registration
+Login
+Refresh Token
+Logout
+Forgot Password
+Email Verification
+Change Password
+2. User Profile
+Upload profile picture
+Cover photo
+Bio
+Gender
+Birthday
+Location
+Education
+Work
+Social links
+Privacy settings
+3. Friend System
+Send friend request
+Accept request
+Reject request
+Cancel request
+Unfriend
+Friend list
+Mutual friends
+4. User Wall
+
+Every user has a wall.
+
+User can
+
+Create post
+Edit post
+Delete post
+Pin post
+Share post
+Upload multiple images
+Upload video
+GIF support
+5. Post
+
+Supported post types
+
+Text
+Image
+Video
+Mixed
+6. Reactions
+
+Instead of only Like
+
+Support
+
+Like
+Love
+Haha
+Wow
+Sad
+Angry
+7. Comment
+Comment
+Reply
+Edit
+Delete
+Like comment
+8. Share
+
+Share post to
+
+Own wall
+Friend wall
+9. Chat
+
+One to One Chat
+
+Features
+
+Real-time SignalR
+Read receipt
+Delivered
+Typing indicator
+Online status
+Offline status
+Last seen
+Emoji
+Reply message
+Edit message
+Delete for me
+Delete for everyone
+Image
+Video
+File
+Voice message
+Search message
+10. Group Chat
+Create group
+Update group
+Remove member
+Add member
+Change group photo
+Assign admin
+Mention users
+11. Video Call
+
+SignalR for signaling
+
+Support
+
+One-to-One
+Group Video
+Screen Sharing
+Camera Toggle
+Mic Toggle
+Call History
+12. Notification
+
+Real-time SignalR
+
+Notification types
+
+Friend request
+Post like
+Comment
+Mention
+New message
+Group invite
+Video call
+Reply
+13. Search
+
+Global search
+
+Search
+
+Users
+Posts
+Groups
+14. Media
+Upload image
+Upload video
+Compress image
+Thumbnail generation
+15. User Settings
+Change password
+Privacy
+Notification settings
+Block user
+16. Admin
+Dashboard
+User Management
+Reported posts
+Delete post
+Suspend user
+Real-Time Features (SignalR)
+Online users
+Typing indicator
+Message received
+Read receipt
+Notification
+Friend request
+Post reaction count update
+Live comments
+Video call signaling
+User presence
+Database Modules
+Identity
+
+Users
+Roles
+UserRoles
+RefreshTokens
+
+---------------------
+
+Profile
+
+Profiles
+Education
+Experience
+
+---------------------
+
+Friend
+
+FriendRequests
+Friends
+
+---------------------
+
+Post
+
+Posts
+PostImages
+PostVideos
+
+---------------------
+
+Comment
+
+Comments
+
+---------------------
+
+Reaction
+
+Reactions
+
+---------------------
+
+Chat
+
+Chats
+Messages
+MessageAttachments
+MessageReads
+
+---------------------
+
+Group
+
+Groups
+GroupMembers
+
+---------------------
+
+Notification
+
+Notifications
+
+---------------------
+
+VideoCall
+
+Calls
+CallParticipants
+
+---------------------
+
+Media
+
+MediaFiles
+Folder Structure
+Modules
+
+Identity
+    Controllers
+    Managers
+    Repositories
+    Interfaces
+    DTOs
+    Validators
+    Entities
+
+Post
+
+Comment
+
+Reaction
+
+Chat
+
+Notification
+
+Profile
+
+Friend
+
+VideoCall
+
+Media
+
+Search
+API Pattern
+Controller
+
+↓
+
+Manager
+
+↓
+
+Repository
+
+↓
+
+UnitOfWork
+
+↓
+
+DbContext
+
+Every module should have:
+
+Controller
+Manager
+Repository
+Interface
+DTO
+Validator
+Entity
+Mapping
+Configuration
+Best Practices
+Clean Architecture
+SOLID Principles
+Dependency Injection
+Generic Repository
+Unit of Work
+Global Exception Middleware
+API Versioning
+Pagination
+Soft Delete
+Audit Fields
+Response Wrapper
+Logging
+Validation
+JWT Authentication
+Role-Based Authorization
+SignalR Authentication
+File Upload Service
+Optimistic Concurrency
+Transaction Management
+Modular Monolith with clear module boundaries

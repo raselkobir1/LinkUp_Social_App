@@ -1,0 +1,49 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/API/">
+    <Project Path="src/API/LinkUp.API.csproj" />
+  </Folder>
+  <Folder Name="/src/BuildingBlocks/">
+    <Project Path="src/BuildingBlocks/LinkUp.BuildingBlocks.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/Admin/">
+    <Project Path="src/Modules/Admin/LinkUp.Modules.Admin.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Chat/">
+    <Project Path="src/Modules/Chat/LinkUp.Modules.Chat.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Comment/">
+    <Project Path="src/Modules/Comment/LinkUp.Modules.Comment.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Friend/">
+    <Project Path="src/Modules/Friend/LinkUp.Modules.Friend.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Identity/">
+    <Project Path="src/Modules/Identity/LinkUp.Modules.Identity.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Media/">
+    <Project Path="src/Modules/Media/LinkUp.Modules.Media.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Notification/">
+    <Project Path="src/Modules/Notification/LinkUp.Modules.Notification.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Post/">
+    <Project Path="src/Modules/Post/LinkUp.Modules.Post.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Reaction/">
+    <Project Path="src/Modules/Reaction/LinkUp.Modules.Reaction.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Search/">
+    <Project Path="src/Modules/Search/LinkUp.Modules.Search.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/UserProfile/">
+    <Project Path="src/Modules/UserProfile/LinkUp.Modules.UserProfile.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/VideoCall/">
+    <Project Path="src/Modules/VideoCall/LinkUp.Modules.VideoCall.csproj" />
+  </Folder>
+  <Folder Name="/src/SharedKernel/">
+    <Project Path="src/SharedKernel/LinkUp.SharedKernel.csproj" />
+  </Folder>
+</Solution>

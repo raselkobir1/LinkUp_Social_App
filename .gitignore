@@ -1,0 +1,47 @@
+## .NET
+*.user
+*.suo
+*.userprefs
+.vs/
+bin/
+obj/
+*.nupkg
+*.snupkg
+.nuget/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+**/Properties/launchSettings.json
+
+## Logs
+logs/
+*.log
+
+## Environment / secrets
+.env
+.env.local
+appsettings.Production.json
+appsettings.Secrets.json
+secrets.json
+
+## EF Core
+Migrations/
+
+## Docker
+.dockerignore
+
+## Angular
+frontend/linkup-web/node_modules/
+frontend/linkup-web/dist/
+frontend/linkup-web/.angular/
+frontend/linkup-web/*.js.map
+
+## OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## IDE
+.idea/
+*.swp
+*.swo

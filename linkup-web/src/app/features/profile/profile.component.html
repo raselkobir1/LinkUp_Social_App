@@ -1,0 +1,150 @@
+@if (loading()) {
+  <div class="flex justify-center py-20"><mat-spinner></mat-spinner></div>
+}
+
+@if (profile(); as p) {
+  <div class="max-w-4xl mx-auto">
+    <!-- Cover photo -->
+    <div class="relative bg-gray-300 h-64 rounded-b-xl overflow-hidden">
+      @if (p.coverPhotoUrl) {
+        <img [src]="p.coverPhotoUrl" class="w-full h-full object-cover">
+      } @else {
+        <div class="w-full h-full bg-gradient-to-br from-blue-400 to-blue-600"></div>
+      }
+
+      <!-- Profile picture -->
+      <div class="absolute -bottom-16 left-8">
+        <div class="relative">
+          <img [src]="p.profilePictureUrl || 'assets/default-avatar.png'"
+            class="w-32 h-32 rounded-full border-4 border-white object-cover">
+          @if (isOwnProfile) {
+            <label class="absolute bottom-2 right-2 bg-gray-100 rounded-full p-1.5 cursor-pointer shadow hover:bg-gray-200">
+              <mat-icon class="text-gray-600" style="font-size:16px;height:16px;width:16px">camera_alt</mat-icon>
+              <input type="file" accept="image/*" class="hidden" (change)="uploadProfilePicture($event)">
+            </label>
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- Profile info -->
+    <div class="bg-white px-8 pb-4 pt-20 shadow-sm">
+      <div class="flex items-end justify-between">
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900">{{ p.fullName }}</h1>
+          <p class="text-gray-500 text-sm">{{ p.friendCount }} friends</p>
+          @if (p.bio) { <p class="text-gray-600 mt-1">{{ p.bio }}</p> }
+        </div>
+
+        <!-- Action buttons -->
+        <div class="flex gap-2 mb-1">
+          @if (isOwnProfile) {
+            <button mat-stroked-button>
+              <mat-icon>edit</mat-icon> Edit profile
+            </button>
+          } @else {
+            @switch (p.friendshipStatus) {
+              @case ('Friends') {
+                <button mat-stroked-button>
+                  <mat-icon>check</mat-icon> Friends
+                </button>
+                <button mat-flat-button color="primary" routerLink="/messages">
+                  <mat-icon>chat</mat-icon> Message
+                </button>
+              }
+              @case ('Pending') {
+                <button mat-stroked-button disabled>
+                  <mat-icon>hourglass_empty</mat-icon> Request sent
+                </button>
+              }
+              @case ('RequestReceived') {
+                <button mat-flat-button color="primary" (click)="acceptRequest()">
+                  <mat-icon>person_add</mat-icon> Accept request
+                </button>
+              }
+              @default {
+                <button mat-flat-button color="primary" (click)="sendFriendRequest()">
+                  <mat-icon>person_add</mat-icon> Add friend
+                </button>
+              }
+            }
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="mt-4 px-4">
+      <mat-tab-group>
+        <mat-tab label="Posts">
+          <div class="mt-4 max-w-2xl mx-auto space-y-4">
+            @if (isOwnProfile) {
+              <app-create-post (postCreated)="onPostCreated($event)"></app-create-post>
+            }
+            @for (post of posts(); track post.id) {
+              <app-post-card [post]="post" (postDeleted)="onPostDeleted($event)"></app-post-card>
+            }
+          </div>
+        </mat-tab>
+
+        <mat-tab label="About">
+          <div class="mt-4 max-w-2xl mx-auto bg-white rounded-xl shadow-sm p-6">
+            <h3 class="font-semibold text-gray-800 mb-4">About</h3>
+
+            @if (p.bio) {
+              <div class="mb-4">
+                <p class="text-gray-700">{{ p.bio }}</p>
+              </div>
+            }
+
+            <div class="space-y-2 text-sm text-gray-600">
+              @if (p.location) {
+                <div class="flex items-center gap-2">
+                  <mat-icon class="text-gray-400">location_on</mat-icon> {{ p.location }}
+                </div>
+              }
+              @if (p.website) {
+                <div class="flex items-center gap-2">
+                  <mat-icon class="text-gray-400">link</mat-icon>
+                  <a [href]="p.website" target="_blank" class="text-[#1877f2]">{{ p.website }}</a>
+                </div>
+              }
+            </div>
+
+            @if (p.education?.length > 0) {
+              <h4 class="font-semibold text-gray-800 mt-6 mb-3">Education</h4>
+              @for (edu of p.education; track edu.id) {
+                <div class="flex items-start gap-3 mb-3">
+                  <mat-icon class="text-gray-400">school</mat-icon>
+                  <div>
+                    <p class="font-medium text-gray-800">{{ edu.school }}</p>
+                    @if (edu.degree) { <p class="text-sm text-gray-500">{{ edu.degree }}</p> }
+                  </div>
+                </div>
+              }
+            }
+
+            @if (p.experience?.length > 0) {
+              <h4 class="font-semibold text-gray-800 mt-6 mb-3">Work</h4>
+              @for (exp of p.experience; track exp.id) {
+                <div class="flex items-start gap-3 mb-3">
+                  <mat-icon class="text-gray-400">work</mat-icon>
+                  <div>
+                    <p class="font-medium text-gray-800">{{ exp.position }} at {{ exp.company }}</p>
+                    @if (exp.isCurrent) { <p class="text-sm text-green-500">Current</p> }
+                  </div>
+                </div>
+              }
+            }
+          </div>
+        </mat-tab>
+
+        <mat-tab label="Friends">
+          <div class="mt-4 max-w-2xl mx-auto text-center py-8 text-gray-400">
+            Friends list
+          </div>
+        </mat-tab>
+      </mat-tab-group>
+    </div>
+  </div>
+}

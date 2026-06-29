@@ -1,0 +1,90 @@
+<div class="max-w-4xl mx-auto px-4 py-6">
+  <h1 class="text-2xl font-bold text-gray-800 mb-6">Friends</h1>
+
+  <mat-tab-group>
+    <!-- Pending Requests -->
+    <mat-tab [label]="'Requests' + (pendingRequests().length ? ' (' + pendingRequests().length + ')' : '')">
+      <div class="mt-4">
+        @if (pendingRequests().length === 0) {
+          <div class="text-center py-12 text-gray-400">No pending friend requests</div>
+        }
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          @for (req of pendingRequests(); track req.id) {
+            <div class="bg-white rounded-xl shadow-sm p-4">
+              <a [routerLink]="['/profile', req.senderId]" class="flex items-center gap-3 mb-3 no-underline">
+                <img [src]="req.senderProfilePicture || 'assets/default-avatar.png'"
+                  class="w-12 h-12 rounded-full object-cover">
+                <div>
+                  <p class="font-semibold text-gray-800">{{ req.senderName }}</p>
+                  @if (req.mutualFriendCount > 0) {
+                    <p class="text-xs text-gray-400">{{ req.mutualFriendCount }} mutual friends</p>
+                  }
+                </div>
+              </a>
+              <div class="flex gap-2">
+                <button mat-flat-button color="primary" class="flex-1"
+                  (click)="acceptRequest(req.id, req.senderId)">
+                  Confirm
+                </button>
+                <button mat-stroked-button class="flex-1" (click)="rejectRequest(req.id)">
+                  Delete
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    </mat-tab>
+
+    <!-- Friends list -->
+    <mat-tab label="All Friends">
+      <div class="mt-4">
+        @if (loading()) {
+          <div class="flex justify-center py-10"><mat-spinner diameter="40"></mat-spinner></div>
+        }
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          @for (friend of friends(); track friend.userId) {
+            <div class="bg-white rounded-xl shadow-sm p-4 flex items-center justify-between">
+              <a [routerLink]="['/profile', friend.userId]" class="flex items-center gap-3 no-underline flex-1">
+                <img [src]="friend.profilePictureUrl || 'assets/default-avatar.png'"
+                  class="w-12 h-12 rounded-full object-cover">
+                <div>
+                  <p class="font-semibold text-gray-800">{{ friend.fullName }}</p>
+                  @if (friend.mutualFriendCount > 0) {
+                    <p class="text-xs text-gray-400">{{ friend.mutualFriendCount }} mutual</p>
+                  }
+                </div>
+              </a>
+              <button mat-icon-button (click)="unfriend(friend.userId)" class="text-gray-400" title="Unfriend">
+                <mat-icon>person_remove</mat-icon>
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    </mat-tab>
+
+    <!-- Suggestions -->
+    <mat-tab label="People You May Know">
+      <div class="mt-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          @for (user of suggestions(); track user.userId) {
+            <div class="bg-white rounded-xl shadow-sm p-4 text-center">
+              <a [routerLink]="['/profile', user.userId]" class="block no-underline mb-3">
+                <img [src]="user.profilePictureUrl || 'assets/default-avatar.png'"
+                  class="w-20 h-20 rounded-full mx-auto object-cover mb-2">
+                <p class="font-semibold text-gray-800">{{ user.fullName }}</p>
+                @if (user.mutualFriendCount > 0) {
+                  <p class="text-xs text-gray-400">{{ user.mutualFriendCount }} mutual friends</p>
+                }
+              </a>
+              <button mat-flat-button color="primary" class="w-full" (click)="sendRequest(user.userId)">
+                <mat-icon>person_add</mat-icon> Add Friend
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>

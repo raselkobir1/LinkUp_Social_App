@@ -1,0 +1,135 @@
+<div class="flex h-[calc(100vh-56px)] bg-white">
+  <!-- Chat list sidebar -->
+  <div class="w-80 border-r border-gray-200 flex flex-col flex-shrink-0">
+    <div class="p-4 border-b border-gray-100">
+      <h2 class="text-xl font-bold text-gray-800">Messages</h2>
+    </div>
+
+    <div class="flex-1 overflow-y-auto">
+      @for (chat of chats(); track chat.id) {
+        <button (click)="openChat(chat.id)"
+          class="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+          [class.bg-blue-50]="activeChat()?.id === chat.id">
+          <div class="relative flex-shrink-0">
+            <img [src]="chat.otherUserProfilePicture || 'assets/default-avatar.png'"
+              class="w-12 h-12 rounded-full object-cover">
+            @if (chat.otherUserIsOnline) {
+              <span class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></span>
+            }
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex justify-between items-baseline">
+              <p class="font-semibold text-gray-800 text-sm truncate">{{ chat.isGroup ? chat.groupName : chat.otherUserName }}</p>
+              @if (chat.lastMessageAt) {
+                <span class="text-xs text-gray-400 flex-shrink-0 ml-2">{{ timeAgo(chat.lastMessageAt) }}</span>
+              }
+            </div>
+            @if (chat.lastMessage) {
+              <p class="text-xs text-gray-400 truncate">{{ chat.lastMessage }}</p>
+            }
+          </div>
+          @if (chat.unreadCount > 0) {
+            <span class="bg-[#1877f2] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
+              {{ chat.unreadCount }}
+            </span>
+          }
+        </button>
+      }
+
+      @if (chats().length === 0) {
+        <div class="text-center py-10 text-gray-400 text-sm">No conversations yet</div>
+      }
+    </div>
+  </div>
+
+  <!-- Chat window -->
+  @if (activeChat(); as chat) {
+    <div class="flex-1 flex flex-col">
+      <!-- Header -->
+      <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-200 bg-white">
+        <img [src]="chat.otherUserProfilePicture || 'assets/default-avatar.png'" class="w-10 h-10 rounded-full object-cover">
+        <div>
+          <p class="font-semibold text-gray-800">{{ chat.isGroup ? chat.groupName : chat.otherUserName }}</p>
+          @if (chat.otherUserIsOnline) {
+            <p class="text-xs text-green-500">Active now</p>
+          }
+        </div>
+        <div class="ml-auto flex gap-1">
+          <button mat-icon-button class="text-[#1877f2]" title="Video call">
+            <mat-icon>videocam</mat-icon>
+          </button>
+          <button mat-icon-button class="text-[#1877f2]" title="Voice call">
+            <mat-icon>call</mat-icon>
+          </button>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div #messagesContainer class="flex-1 overflow-y-auto p-4 space-y-2">
+        @if (loading()) {
+          <div class="flex justify-center py-4"><mat-spinner diameter="32"></mat-spinner></div>
+        }
+
+        @for (msg of messages(); track msg.id) {
+          <div class="flex" [class.justify-end]="msg.senderId === auth.currentUser()?.id">
+            @if (msg.senderId !== auth.currentUser()?.id) {
+              <img [src]="msg.senderProfilePicture || 'assets/default-avatar.png'" class="w-7 h-7 rounded-full mr-2 flex-shrink-0 self-end">
+            }
+            <div class="max-w-[65%]">
+              <div class="px-3 py-2 rounded-2xl text-sm"
+                [class.bg-[#1877f2]]="msg.senderId === auth.currentUser()?.id"
+                [class.text-white]="msg.senderId === auth.currentUser()?.id"
+                [class.bg-gray-100]="msg.senderId !== auth.currentUser()?.id"
+                [class.text-gray-800]="msg.senderId !== auth.currentUser()?.id">
+                @if (msg.isDeletedForEveryone) {
+                  <em class="text-gray-400">Message deleted</em>
+                } @else {
+                  {{ msg.content }}
+                }
+              </div>
+              <p class="text-xs text-gray-400 mt-0.5" [class.text-right]="msg.senderId === auth.currentUser()?.id">
+                {{ timeAgo(msg.createdAt) }}
+                @if (msg.senderId === auth.currentUser()?.id) {
+                  <mat-icon style="font-size:12px;height:12px;width:12px" class="ml-1">
+                    {{ msg.status === 'Read' ? 'done_all' : msg.status === 'Delivered' ? 'done_all' : 'done' }}
+                  </mat-icon>
+                }
+              </p>
+            </div>
+          </div>
+        }
+
+        <!-- Typing indicator -->
+        @if (typingUsers().size > 0) {
+          <div class="flex items-center gap-2 text-xs text-gray-400">
+            <div class="flex gap-1 bg-gray-100 rounded-full px-3 py-2">
+              <span class="animate-bounce delay-0">•</span>
+              <span class="animate-bounce delay-100">•</span>
+              <span class="animate-bounce delay-200">•</span>
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- Input -->
+      <div class="px-4 py-3 border-t border-gray-200 flex items-center gap-2">
+        <div class="flex-1 flex items-center gap-2 bg-gray-100 rounded-full px-4 py-2">
+          <input type="text" [(ngModel)]="newMessage" placeholder="Aa"
+            class="flex-1 bg-transparent outline-none text-sm"
+            (keyup.enter)="sendMessage()"
+            (input)="onTyping()">
+        </div>
+        <button mat-icon-button color="primary" (click)="sendMessage()" [disabled]="!newMessage.trim()">
+          <mat-icon>send</mat-icon>
+        </button>
+      </div>
+    </div>
+  } @else {
+    <div class="flex-1 flex items-center justify-center text-gray-400">
+      <div class="text-center">
+        <mat-icon class="text-6xl text-gray-200">chat_bubble_outline</mat-icon>
+        <p class="mt-2">Select a conversation</p>
+      </div>
+    </div>
+  }
+</div>

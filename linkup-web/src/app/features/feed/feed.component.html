@@ -1,0 +1,39 @@
+<div class="max-w-2xl mx-auto px-4 py-6">
+
+  <!-- Create Post -->
+  <app-create-post (postCreated)="onPostCreated($event)" class="mb-4 block" />
+
+  <!-- Loading -->
+  @if (loading()) {
+    <div class="flex justify-center py-10">
+      <mat-spinner diameter="40"></mat-spinner>
+    </div>
+  }
+
+  <!-- Posts -->
+  @for (post of posts(); track post.id) {
+    <app-post-card
+      [post]="post"
+      class="mb-4 block"
+      (postDeleted)="onPostDeleted($event)"
+      (postUpdated)="onPostUpdated($event)">
+    </app-post-card>
+  }
+
+  @if (!loading() && posts().length === 0) {
+    <div class="text-center py-16 text-gray-400">
+      <p class="text-lg">Your feed is empty.</p>
+      <p class="text-sm mt-1">Add some friends to see their posts here.</p>
+    </div>
+  }
+
+  <!-- Load More -->
+  @if (hasMore && !loading()) {
+    <div class="flex justify-center mt-4">
+      <button mat-stroked-button (click)="loadMore()" [disabled]="loadingMore()">
+        @if (loadingMore()) { <mat-spinner diameter="20" class="inline mr-2"></mat-spinner> }
+        Load more
+      </button>
+    </div>
+  }
+</div>

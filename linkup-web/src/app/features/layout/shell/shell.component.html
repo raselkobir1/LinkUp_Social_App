@@ -1,0 +1,74 @@
+<div class="flex flex-col h-screen">
+  <!-- Top Navbar -->
+  <nav class="bg-white border-b border-gray-200 shadow-sm z-50 sticky top-0">
+    <div class="max-w-7xl mx-auto px-4 flex items-center justify-between h-14">
+
+      <!-- Logo -->
+      <a routerLink="/feed" class="text-2xl font-bold text-[#1877f2] no-underline">LinkUp</a>
+
+      <!-- Search -->
+      <div class="hidden sm:flex items-center bg-gray-100 rounded-full px-4 py-2 w-64">
+        <mat-icon class="text-gray-400 text-xl mr-2">search</mat-icon>
+        <input
+          type="text"
+          placeholder="Search LinkUp..."
+          class="bg-transparent outline-none text-sm w-full"
+          (keyup.enter)="onSearch($event)">
+      </div>
+
+      <!-- Center Nav -->
+      <div class="hidden md:flex items-center gap-1">
+        <a routerLink="/feed" routerLinkActive="text-[#1877f2] border-b-2 border-[#1877f2]"
+          class="px-6 py-3 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors" matTooltip="Home">
+          <mat-icon>home</mat-icon>
+        </a>
+        <a routerLink="/friends" routerLinkActive="text-[#1877f2] border-b-2 border-[#1877f2]"
+          class="px-6 py-3 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors" matTooltip="Friends">
+          <mat-icon>group</mat-icon>
+        </a>
+        <a routerLink="/messages" routerLinkActive="text-[#1877f2] border-b-2 border-[#1877f2]"
+          class="px-6 py-3 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors" matTooltip="Messages">
+          <mat-icon>chat_bubble</mat-icon>
+        </a>
+      </div>
+
+      <!-- Right Actions -->
+      <div class="flex items-center gap-2">
+        <!-- Notifications -->
+        <a routerLink="/notifications"
+          class="p-2 rounded-full hover:bg-gray-100 text-gray-600 relative" matTooltip="Notifications">
+          <mat-icon [matBadge]="notifService.unreadCount() || null" matBadgeColor="warn" matBadgeSize="small">
+            notifications
+          </mat-icon>
+        </a>
+
+        <!-- User Menu -->
+        @if (auth.currentUser(); as user) {
+          <button mat-icon-button [matMenuTriggerFor]="userMenu" class="flex items-center gap-2">
+            <img
+              [src]="user.profilePictureUrl || 'assets/default-avatar.png'"
+              [alt]="user.fullName"
+              class="w-9 h-9 rounded-full object-cover border-2 border-gray-200">
+          </button>
+          <mat-menu #userMenu="matMenu">
+            <a mat-menu-item [routerLink]="['/profile', user.id]">
+              <mat-icon>person</mat-icon> My Profile
+            </a>
+            <a mat-menu-item routerLink="/friends">
+              <mat-icon>group</mat-icon> Friends
+            </a>
+            <mat-divider></mat-divider>
+            <button mat-menu-item (click)="logout()">
+              <mat-icon>logout</mat-icon> Sign out
+            </button>
+          </mat-menu>
+        }
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="flex-1 overflow-y-auto bg-[#f0f2f5]">
+    <router-outlet></router-outlet>
+  </main>
+</div>

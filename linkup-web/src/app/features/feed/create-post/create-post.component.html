@@ -1,0 +1,74 @@
+<div class="bg-white rounded-xl shadow-sm p-4">
+  <!-- Header -->
+  <div class="flex items-center gap-3 mb-3">
+    @if (auth.currentUser(); as user) {
+      <img [src]="user.profilePictureUrl || 'assets/default-avatar.png'"
+        class="w-10 h-10 rounded-full object-cover">
+      <textarea
+        [(ngModel)]="content"
+        placeholder="What's on your mind, {{ user.firstName }}?"
+        class="flex-1 bg-gray-100 rounded-full px-4 py-2 text-sm resize-none outline-none min-h-[40px] max-h-32"
+        rows="1">
+      </textarea>
+    }
+  </div>
+
+  <!-- Image previews -->
+  @if (uploadedImageUrls.length > 0) {
+    <div class="flex flex-wrap gap-2 mb-3">
+      @for (url of uploadedImageUrls; track url) {
+        <div class="relative">
+          <img [src]="url" class="h-24 w-24 object-cover rounded-lg">
+          <button (click)="removeImage(url)"
+            class="absolute top-1 right-1 bg-black/50 rounded-full p-0.5 text-white hover:bg-black/70">
+            <mat-icon class="text-sm">close</mat-icon>
+          </button>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Video preview -->
+  @if (uploadedVideoUrl) {
+    <div class="mb-3">
+      <video [src]="uploadedVideoUrl" controls class="w-full max-h-48 rounded-lg"></video>
+    </div>
+  }
+
+  <!-- Upload indicator -->
+  @if (uploadingMedia()) {
+    <div class="flex items-center gap-2 text-sm text-gray-500 mb-3">
+      <mat-spinner diameter="16"></mat-spinner> Uploading media...
+    </div>
+  }
+
+  <!-- Actions bar -->
+  <div class="flex items-center justify-between border-t border-gray-100 pt-3">
+    <div class="flex gap-2">
+      <label class="flex items-center gap-1 text-sm text-gray-500 hover:bg-gray-100 rounded-lg px-3 py-2 cursor-pointer transition-colors">
+        <mat-icon class="text-green-500 text-xl">photo_library</mat-icon>
+        <span class="hidden sm:inline">Photo</span>
+        <input type="file" accept="image/*" multiple class="hidden" (change)="onImageSelected($event)">
+      </label>
+      <label class="flex items-center gap-1 text-sm text-gray-500 hover:bg-gray-100 rounded-lg px-3 py-2 cursor-pointer transition-colors">
+        <mat-icon class="text-red-500 text-xl">videocam</mat-icon>
+        <span class="hidden sm:inline">Video</span>
+        <input type="file" accept="video/*" class="hidden" (change)="onVideoSelected($event)">
+      </label>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <mat-select [(value)]="visibility" class="text-sm w-28">
+        <mat-option value="Public">Public</mat-option>
+        <mat-option value="Friends">Friends</mat-option>
+        <mat-option value="OnlyMe">Only me</mat-option>
+      </mat-select>
+
+      <button mat-flat-button color="primary" (click)="submit()"
+        [disabled]="loading() || uploadingMedia() || (!content.trim() && uploadedImageUrls.length === 0 && !uploadedVideoUrl)">
+        @if (loading()) { <mat-spinner diameter="16" class="inline mr-1"></mat-spinner> }
+        Post
+      </button>
+    </div>
+  </div>
+</div>

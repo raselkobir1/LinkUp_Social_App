@@ -1,0 +1,43 @@
+@use '@angular/material' as mat;
+@import "tailwindcss";
+
+html {
+  height: 100%;
+  @include mat.theme((
+    color: (
+      primary: mat.$blue-palette,
+      tertiary: mat.$green-palette,
+    ),
+    typography: Roboto,
+    density: 0,
+  ));
+}
+
+body {
+  color-scheme: light;
+  background-color: #f0f2f5;
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+  margin: 0;
+  height: 100%;
+  font-family: 'Inter', 'Roboto', sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+:root {
+  --color-primary: #1877f2;
+  --color-primary-dark: #166fe5;
+  --color-bg: #f0f2f5;
+  --color-surface: #ffffff;
+  --color-border: #e4e6eb;
+  --color-text: #1c1e21;
+  --color-text-secondary: #65676b;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+
+a { color: var(--color-primary); text-decoration: none; }
+a:hover { text-decoration: underline; }

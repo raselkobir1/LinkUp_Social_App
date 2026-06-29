@@ -1,0 +1,77 @@
+<div class="min-h-screen flex items-center justify-center bg-[#f0f2f5] py-8">
+  <div class="w-full max-w-md">
+    <div class="text-center mb-8">
+      <h1 class="text-5xl font-bold text-[#1877f2]">LinkUp</h1>
+      <p class="text-xl text-gray-600 mt-2">Connect. Share. Chat.</p>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-lg p-8">
+      <h2 class="text-2xl font-semibold text-gray-800 mb-1">Create account</h2>
+      <p class="text-gray-500 text-sm mb-6">It's quick and easy.</p>
+
+      @if (error) {
+        <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{{ error }}</div>
+      }
+
+      <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <mat-form-field appearance="outline">
+            <mat-label>First name</mat-label>
+            <input matInput formControlName="firstName">
+            @if (form.get('firstName')?.hasError('required') && form.get('firstName')?.touched) {
+              <mat-error>Required</mat-error>
+            }
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Last name</mat-label>
+            <input matInput formControlName="lastName">
+            @if (form.get('lastName')?.hasError('required') && form.get('lastName')?.touched) {
+              <mat-error>Required</mat-error>
+            }
+          </mat-form-field>
+        </div>
+
+        <mat-form-field class="w-full" appearance="outline">
+          <mat-label>Username</mat-label>
+          <input matInput formControlName="userName" autocomplete="username">
+          @if (form.get('userName')?.hasError('pattern') && form.get('userName')?.touched) {
+            <mat-error>Only letters, numbers and underscores</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field class="w-full" appearance="outline">
+          <mat-label>Email address</mat-label>
+          <input matInput type="email" formControlName="email" autocomplete="email">
+          @if (form.get('email')?.hasError('email') && form.get('email')?.touched) {
+            <mat-error>Enter a valid email</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field class="w-full" appearance="outline">
+          <mat-label>Password</mat-label>
+          <input matInput type="password" formControlName="password" autocomplete="new-password">
+          @if (form.get('password')?.hasError('minlength') && form.get('password')?.touched) {
+            <mat-error>At least 8 characters</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field class="w-full" appearance="outline">
+          <mat-label>Confirm password</mat-label>
+          <input matInput type="password" formControlName="confirmPassword" autocomplete="new-password">
+          @if (form.hasError('mismatch') && form.get('confirmPassword')?.touched) {
+            <mat-error>Passwords do not match</mat-error>
+          }
+        </mat-form-field>
+
+        <button mat-flat-button color="primary" type="submit" class="w-full py-3 text-lg" [disabled]="loading || form.invalid">
+          @if (loading) { <mat-spinner diameter="20" class="inline mr-2"></mat-spinner> }
+          {{ loading ? 'Creating account...' : 'Sign up' }}
+        </button>
+      </form>
+
+      <div class="mt-4 text-center text-sm text-gray-500">
+        Already have an account? <a routerLink="/auth/login" class="text-[#1877f2] font-semibold hover:underline">Sign in</a>
+      </div>
+    </div>
+  </div>
+</div>

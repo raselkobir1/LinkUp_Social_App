@@ -1,0 +1,64 @@
+<div class="relative bg-black h-screen flex items-center justify-center">
+  <!-- Remote video (full screen) -->
+  <video #remoteVideo autoplay playsinline class="w-full h-full object-cover"></video>
+
+  <!-- Local video (PiP) -->
+  <video #localVideo autoplay playsinline muted
+    class="absolute top-4 right-4 w-36 h-24 object-cover rounded-xl border-2 border-white shadow-lg"
+    [class.hidden]="isCameraOff()"></video>
+
+  <!-- Status overlay -->
+  @if (callStatus() === 'connecting') {
+    <div class="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white">
+      <div class="animate-pulse">
+        <mat-icon style="font-size:64px;height:64px;width:64px">videocam</mat-icon>
+      </div>
+      <p class="mt-4 text-xl">Connecting...</p>
+    </div>
+  }
+
+  @if (callStatus() === 'ended') {
+    <div class="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-white">
+      <mat-icon style="font-size:64px;height:64px;width:64px">call_end</mat-icon>
+      <p class="mt-4 text-xl">Call ended</p>
+    </div>
+  }
+
+  <!-- Duration -->
+  @if (callStatus() === 'active') {
+    <div class="absolute top-4 left-1/2 -translate-x-1/2 text-white text-sm bg-black/40 px-4 py-1 rounded-full">
+      {{ formattedDuration }}
+    </div>
+  }
+
+  <!-- Controls -->
+  @if (callStatus() !== 'ended') {
+    <div class="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4">
+      <!-- Mute -->
+      <button (click)="toggleMute()"
+        class="w-14 h-14 rounded-full flex items-center justify-center transition-colors"
+        [class.bg-white]="!isMuted()"
+        [class.bg-red-500]="isMuted()">
+        <mat-icon [class.text-gray-800]="!isMuted()" [class.text-white]="isMuted()">
+          {{ isMuted() ? 'mic_off' : 'mic' }}
+        </mat-icon>
+      </button>
+
+      <!-- End call -->
+      <button (click)="endCall()"
+        class="w-16 h-16 rounded-full bg-red-500 flex items-center justify-center hover:bg-red-600 transition-colors">
+        <mat-icon class="text-white text-2xl">call_end</mat-icon>
+      </button>
+
+      <!-- Camera -->
+      <button (click)="toggleCamera()"
+        class="w-14 h-14 rounded-full flex items-center justify-center transition-colors"
+        [class.bg-white]="!isCameraOff()"
+        [class.bg-red-500]="isCameraOff()">
+        <mat-icon [class.text-gray-800]="!isCameraOff()" [class.text-white]="isCameraOff()">
+          {{ isCameraOff() ? 'videocam_off' : 'videocam' }}
+        </mat-icon>
+      </button>
+    </div>
+  }
+</div>

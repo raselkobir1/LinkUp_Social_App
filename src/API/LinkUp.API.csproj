@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Modules\Identity\LinkUp.Modules.Identity.csproj" />
+    <ProjectReference Include="..\Modules\UserProfile\LinkUp.Modules.UserProfile.csproj" />
+    <ProjectReference Include="..\Modules\Friend\LinkUp.Modules.Friend.csproj" />
+    <ProjectReference Include="..\Modules\Post\LinkUp.Modules.Post.csproj" />
+    <ProjectReference Include="..\Modules\Comment\LinkUp.Modules.Comment.csproj" />
+    <ProjectReference Include="..\Modules\Reaction\LinkUp.Modules.Reaction.csproj" />
+    <ProjectReference Include="..\Modules\Chat\LinkUp.Modules.Chat.csproj" />
+    <ProjectReference Include="..\Modules\Notification\LinkUp.Modules.Notification.csproj" />
+    <ProjectReference Include="..\Modules\VideoCall\LinkUp.Modules.VideoCall.csproj" />
+    <ProjectReference Include="..\Modules\Media\LinkUp.Modules.Media.csproj" />
+    <ProjectReference Include="..\Modules\Search\LinkUp.Modules.Search.csproj" />
+    <ProjectReference Include="..\Modules\Admin\LinkUp.Modules.Admin.csproj" />
+    <ProjectReference Include="..\BuildingBlocks\LinkUp.BuildingBlocks.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Asp.Versioning.Mvc" Version="8.1.0" />
+    <PackageReference Include="Asp.Versioning.Mvc.ApiExplorer" Version="8.1.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
+    <PackageReference Include="AutoMapper" Version="12.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+    <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageReference Include="StackExchange.Redis" Version="2.8.41" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.3.1" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>
