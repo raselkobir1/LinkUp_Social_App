@@ -7,6 +7,7 @@ public class FriendDbContext(DbContextOptions<FriendDbContext> options) : DbCont
 {
     public DbSet<FriendRequest> FriendRequests => Set<FriendRequest>();
     public DbSet<Friendship> Friendships => Set<Friendship>();
+    public DbSet<BlockedUser> BlockedUsers => Set<BlockedUser>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -34,6 +35,15 @@ public class FriendDbContext(DbContextOptions<FriendDbContext> options) : DbCont
             e.Property(x => x.UserProfilePictureUrl).HasMaxLength(500);
             e.Property(x => x.FriendName).HasMaxLength(200).IsRequired();
             e.Property(x => x.FriendProfilePictureUrl).HasMaxLength(500);
+        });
+
+        builder.Entity<BlockedUser>(e =>
+        {
+            e.ToTable("BlockedUsers");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.BlockerId, x.BlockedId }).IsUnique();
+            e.Property(x => x.BlockedName).HasMaxLength(200).IsRequired();
+            e.Property(x => x.BlockedProfilePictureUrl).HasMaxLength(500);
         });
     }
 }

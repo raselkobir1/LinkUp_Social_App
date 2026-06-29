@@ -24,6 +24,30 @@ public class VideoCallHub : Hub
         await Clients.Group(targetUserId).SendAsync("CallInitiated", callId, CurrentUserId, callType);
     }
 
+    /// <summary>Start a group call: the caller joins the call group and every invited
+    /// member is rung. Each participant later calls JoinCall to enter the mesh.</summary>
+    public async Task InitiateGroupCall(string callId, string[] memberIds, string callType)
+    {
+        await Groups.AddToGroupAsync(Context.ConnectionId, callId);
+        foreach (var memberId in memberIds)
+            await Clients.Group(memberId).SendAsync("GroupCallInitiated", callId, CurrentUserId, callType, memberIds);
+    }
+
+    /// <summary>A participant joins an in-progress call. Existing members are told to
+    /// open a peer connection (WebRTC mesh) with the joiner.</summary>
+    public async Task JoinCall(string callId)
+    {
+        await Groups.AddToGroupAsync(Context.ConnectionId, callId);
+        await Clients.OthersInGroup(callId).SendAsync("ParticipantJoined", callId, CurrentUserId);
+    }
+
+    /// <summary>A participant leaves a group call (without ending it for everyone).</summary>
+    public async Task LeaveCall(string callId)
+    {
+        await Clients.OthersInGroup(callId).SendAsync("ParticipantLeft", callId, CurrentUserId);
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, callId);
+    }
+
     public async Task AcceptCall(string callerId, string callId)
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, callId);

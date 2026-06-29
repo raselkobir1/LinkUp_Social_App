@@ -19,4 +19,10 @@ public interface IFriendManager
     Task<FriendshipStatusDto> GetFriendshipStatusAsync(Guid userId, Guid otherUserId, CancellationToken ct = default);
     Task<List<UserCardDto>> GetFriendSuggestionsAsync(Guid userId, int count, CancellationToken ct = default);
     Task<bool> IsFriendAsync(Guid userId, Guid otherUserId, CancellationToken ct = default);
+
+    Task BlockUserAsync(Guid userId, Guid targetId, CancellationToken ct = default);
+    Task UnblockUserAsync(Guid userId, Guid targetId, CancellationToken ct = default);
+    Task<List<UserCardDto>> GetBlockedUsersAsync(Guid userId, CancellationToken ct = default);
+    /// <summary>True if either user has blocked the other.</summary>
+    Task<bool> IsBlockedAsync(Guid userId, Guid otherUserId, CancellationToken ct = default);
 }

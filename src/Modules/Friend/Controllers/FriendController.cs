@@ -100,4 +100,28 @@ public class FriendController(IFriendManager friendManager) : BaseApiController
         var result = await friendManager.GetFriendSuggestionsAsync(CurrentUserId, count, ct);
         return ApiOk(result);
     }
+
+    // POST api/v1/friends/block/{userId}
+    [HttpPost("block/{userId:guid}")]
+    public async Task<IActionResult> BlockUser(Guid userId, CancellationToken ct)
+    {
+        await friendManager.BlockUserAsync(CurrentUserId, userId, ct);
+        return ApiOk<object>(null!, "User blocked.");
+    }
+
+    // DELETE api/v1/friends/block/{userId}
+    [HttpDelete("block/{userId:guid}")]
+    public async Task<IActionResult> UnblockUser(Guid userId, CancellationToken ct)
+    {
+        await friendManager.UnblockUserAsync(CurrentUserId, userId, ct);
+        return ApiOk<object>(null!, "User unblocked.");
+    }
+
+    // GET api/v1/friends/blocked
+    [HttpGet("blocked")]
+    public async Task<IActionResult> GetBlocked(CancellationToken ct)
+    {
+        var result = await friendManager.GetBlockedUsersAsync(CurrentUserId, ct);
+        return ApiOk(result);
+    }
 }

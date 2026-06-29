@@ -3,6 +3,9 @@ using LinkUp.BuildingBlocks.Common.Exceptions;
 using LinkUp.BuildingBlocks.Common.Pagination;
 using LinkUp.BuildingBlocks.Infrastructure.Extensions;
 using LinkUp.Modules.Identity.Entities;
+using LinkUp.Modules.Notification.DTOs;
+using LinkUp.Modules.Notification.Interfaces;
+using LinkUp.Modules.Post.Configuration;
 using LinkUp.Modules.Reaction.Configuration;
 using LinkUp.Modules.Reaction.DTOs;
 using LinkUp.Modules.Reaction.Interfaces;
@@ -15,6 +18,8 @@ namespace LinkUp.Modules.Reaction.Managers;
 public class ReactionManager(
     ReactionDbContext db,
     UserManager<ApplicationUser> userManager,
+    PostDbContext postDb,
+    INotificationManager notificationManager,
     IMapper mapper) : IReactionManager
 {
     private static ReactionCountDto BuildReactionCountDto(
@@ -67,6 +72,24 @@ public class ReactionManager(
             };
 
             db.Reactions.Add(reaction);
+
+            // Notify the post author when someone newly reacts to their post.
+            if (string.Equals(dto.TargetType, "Post", StringComparison.OrdinalIgnoreCase))
+            {
+                var authorId = await postDb.Posts
+                    .Where(p => p.Id == dto.TargetId && !p.IsDeleted)
+                    .Select(p => (Guid?)p.AuthorId)
+                    .FirstOrDefaultAsync(ct);
+                if (authorId is { } aid && aid != userId)
+                {
+                    var actor = await userManager.FindByIdAsync(userId.ToString());
+                    await db.SaveChangesAsync(ct);
+                    await notificationManager.CreateNotificationAsync(new CreateNotificationDto(
+                        aid, userId, NotificationType.PostLike,
+                        dto.TargetId, "Post", $"{actor?.FullName ?? "Someone"} reacted to your post"), ct);
+                    return await GetReactionCountsAsync(dto.TargetType, dto.TargetId, userId, ct);
+                }
+            }
         }
 
         await db.SaveChangesAsync(ct);

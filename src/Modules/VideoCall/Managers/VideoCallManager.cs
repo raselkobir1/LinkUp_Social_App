@@ -233,8 +233,10 @@ public class VideoCallManager(
 
     public async Task<CallDto?> GetActiveCallAsync(Guid userId, CancellationToken ct = default)
     {
-        var activeStatuses = new[] { CallStatus.Initiated, CallStatus.Ongoing };
-        var activeParticipantStatuses = new[] { "Joined", "Invited" };
+        // Use List<> (not arrays) so .Contains binds to List<T>.Contains rather than the
+        // ReadOnlySpan<T>.Contains overload, which EF Core cannot translate (throws on query build).
+        var activeStatuses = new List<CallStatus> { CallStatus.Initiated, CallStatus.Ongoing };
+        var activeParticipantStatuses = new List<string> { "Joined", "Invited" };
 
         var call = await db.Calls
             .AsNoTracking()

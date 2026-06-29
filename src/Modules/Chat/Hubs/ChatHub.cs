@@ -1,5 +1,8 @@
 using LinkUp.Modules.Chat.Configuration;
+using LinkUp.Modules.Chat.Interfaces;
+using LinkUp.Modules.Identity.Entities;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
@@ -7,13 +10,23 @@ using System.Security.Claims;
 namespace LinkUp.Modules.Chat.Hubs;
 
 [Authorize]
-public class ChatHub(ChatDbContext db) : Hub
+public class ChatHub(ChatDbContext db, UserManager<ApplicationUser> userManager, IChatManager chatManager) : Hub
 {
     private Guid CurrentUserId => Guid.Parse(Context.User!.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
     public override async Task OnConnectedAsync()
     {
         var userId = CurrentUserId;
+
+        // Mark the user online and broadcast presence to everyone else.
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        if (user is not null)
+        {
+            user.IsOnline = true;
+            user.LastSeen = DateTime.UtcNow;
+            await userManager.UpdateAsync(user);
+        }
+        await Clients.Others.SendAsync("UserOnline", userId);
 
         // Join personal group so targeted notifications can be sent directly to this user
         await Groups.AddToGroupAsync(Context.ConnectionId, userId.ToString());
@@ -33,9 +46,17 @@ public class ChatHub(ChatDbContext db) : Hub
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         var userId = CurrentUserId;
+        var now = DateTime.UtcNow;
 
-        // Broadcast offline status to other connected clients
-        await Clients.Others.SendAsync("UserOffline", userId, DateTime.UtcNow);
+        // Persist offline status + last-seen timestamp, then broadcast it.
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        if (user is not null)
+        {
+            user.IsOnline = false;
+            user.LastSeen = now;
+            await userManager.UpdateAsync(user);
+        }
+        await Clients.Others.SendAsync("UserOffline", userId, now);
         await base.OnDisconnectedAsync(exception);
     }
 
@@ -54,11 +75,19 @@ public class ChatHub(ChatDbContext db) : Hub
         await Clients.OthersInGroup(chatId).SendAsync("UserTyping", Guid.Parse(chatId), userId, isTyping);
     }
 
-    /// <summary>Relay a message-read event to other connected clients.
-    /// Actual persistence is handled via the REST endpoint / ChatManager.</summary>
-    public async Task MarkAsRead(string messageId)
+    /// <summary>Recipient acknowledges a message reached their device. Persists the
+    /// Delivered status and notifies the chat so the sender sees the ✓✓.</summary>
+    public async Task MarkDelivered(string messageId, string chatId)
+    {
+        await chatManager.MarkDeliveredAsync(Guid.Parse(messageId), CurrentUserId);
+        await Clients.OthersInGroup(chatId).SendAsync("MessageDelivered", Guid.Parse(messageId), CurrentUserId);
+    }
+
+    /// <summary>Persist + relay a message-read event to other connected clients.</summary>
+    public async Task MarkAsRead(string messageId, string chatId)
     {
         var userId = CurrentUserId;
-        await Clients.Others.SendAsync("MessageRead", Guid.Parse(messageId), userId);
+        await chatManager.MarkReadAsync(Guid.Parse(messageId), userId);
+        await Clients.OthersInGroup(chatId).SendAsync("MessageRead", Guid.Parse(messageId), userId);
     }
 }

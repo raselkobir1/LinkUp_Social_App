@@ -8,7 +8,10 @@ using LinkUp.Modules.Chat.Entities;
 using LinkUp.Modules.Chat.Hubs;
 using LinkUp.Modules.Chat.Interfaces;
 using LinkUp.Modules.Identity.Entities;
+using LinkUp.Modules.Notification.DTOs;
+using LinkUp.Modules.Notification.Interfaces;
 using LinkUp.SharedKernel.Enums;
+using LinkUp.SharedKernel.Helpers;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +21,8 @@ namespace LinkUp.Modules.Chat.Managers;
 public class ChatManager(
     ChatDbContext db,
     UserManager<ApplicationUser> userManager,
+    INotificationManager notificationManager,
+    LinkUp.Modules.Friend.Interfaces.IFriendManager friendManager,
     IMapper mapper,
     IHubContext<ChatHub> hubContext) : IChatManager
 {
@@ -30,6 +35,9 @@ public class ChatManager(
     public async Task<ChatListItemDto> GetOrCreateDirectChatAsync(
         Guid userId1, Guid userId2, CancellationToken ct = default)
     {
+        if (await friendManager.IsBlockedAsync(userId1, userId2, ct))
+            throw new ForbiddenException("You cannot start a chat with this user.");
+
         // Find an existing non-group chat where BOTH users are active participants.
         var existingChatId = await db.ChatParticipants
             .Where(cp => cp.UserId == userId1 && cp.IsActive)
@@ -112,6 +120,19 @@ public class ChatManager(
         // Update chat's LastMessageAt
         chat.LastMessageAt = DateTime.UtcNow;
 
+        // If any other participant is currently online, the message is delivered to a device.
+        var otherParticipantIds = await db.ChatParticipants
+            .Where(cp => cp.ChatId == dto.ChatId && cp.UserId != senderId && cp.IsActive)
+            .Select(cp => cp.UserId)
+            .ToListAsync(ct);
+        if (otherParticipantIds.Count > 0)
+        {
+            var anyOnline = await userManager.Users
+                .AnyAsync(u => otherParticipantIds.Contains(u.Id) && u.IsOnline, ct);
+            if (anyOnline)
+                message.Status = MessageStatus.Delivered;
+        }
+
         await db.SaveChangesAsync(ct);
 
         var messageDto = await BuildMessageDtoAsync(message, senderId, ct);
@@ -120,6 +141,17 @@ public class ChatManager(
         await hubContext.Clients
             .Group(dto.ChatId.ToString())
             .SendAsync("ReceiveMessage", messageDto, ct);
+
+        // @mention notifications (only to participants of this chat)
+        foreach (var username in MentionParser.ExtractUsernames(dto.Content))
+        {
+            var mentioned = await userManager.FindByNameAsync(username);
+            if (mentioned is null || mentioned.Id == senderId || !otherParticipantIds.Contains(mentioned.Id))
+                continue;
+            await notificationManager.CreateNotificationAsync(new CreateNotificationDto(
+                mentioned.Id, senderId, NotificationType.Mention,
+                dto.ChatId, "Chat", "mentioned you in a message"), ct);
+        }
 
         return messageDto;
     }

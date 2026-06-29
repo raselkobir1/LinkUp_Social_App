@@ -6,6 +6,7 @@ using LinkUp.Modules.Notification.Configuration;
 using LinkUp.Modules.Notification.DTOs;
 using LinkUp.Modules.Notification.Hubs;
 using LinkUp.Modules.Notification.Interfaces;
+using LinkUp.SharedKernel.Enums;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +22,10 @@ public class NotificationManager(
 {
     public async Task<NotificationDto> CreateNotificationAsync(CreateNotificationDto dto, CancellationToken ct = default)
     {
+        // Respect the recipient's notification settings — suppress disabled categories.
+        if (!await IsTypeEnabledAsync(dto.RecipientId, dto.Type, ct))
+            return new NotificationDto { Type = dto.Type, Message = dto.Message };
+
         var notification = new NotificationEntity
         {
             RecipientId = dto.RecipientId,
@@ -148,5 +153,63 @@ public class NotificationManager(
         notification.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<NotificationSettingsDto> GetSettingsAsync(Guid userId, CancellationToken ct = default)
+    {
+        var s = await GetOrCreateSettingsAsync(userId, ct);
+        return new NotificationSettingsDto
+        {
+            FriendRequests = s.FriendRequests,
+            PostReactions = s.PostReactions,
+            Comments = s.Comments,
+            Mentions = s.Mentions,
+            Messages = s.Messages,
+            GroupInvites = s.GroupInvites,
+            VideoCalls = s.VideoCalls
+        };
+    }
+
+    public async Task<NotificationSettingsDto> UpdateSettingsAsync(Guid userId, NotificationSettingsDto dto, CancellationToken ct = default)
+    {
+        var s = await GetOrCreateSettingsAsync(userId, ct);
+        s.FriendRequests = dto.FriendRequests;
+        s.PostReactions = dto.PostReactions;
+        s.Comments = dto.Comments;
+        s.Mentions = dto.Mentions;
+        s.Messages = dto.Messages;
+        s.GroupInvites = dto.GroupInvites;
+        s.VideoCalls = dto.VideoCalls;
+        await db.SaveChangesAsync(ct);
+        return dto;
+    }
+
+    private async Task<Entities.NotificationSettings> GetOrCreateSettingsAsync(Guid userId, CancellationToken ct)
+    {
+        var s = await db.NotificationSettings.FirstOrDefaultAsync(x => x.UserId == userId, ct);
+        if (s is null)
+        {
+            s = new Entities.NotificationSettings { UserId = userId };
+            db.NotificationSettings.Add(s);
+            await db.SaveChangesAsync(ct);
+        }
+        return s;
+    }
+
+    private async Task<bool> IsTypeEnabledAsync(Guid userId, NotificationType type, CancellationToken ct)
+    {
+        var s = await db.NotificationSettings.AsNoTracking().FirstOrDefaultAsync(x => x.UserId == userId, ct);
+        if (s is null) return true; // default: all enabled
+        return type switch
+        {
+            NotificationType.FriendRequest or NotificationType.FriendRequestAccepted => s.FriendRequests,
+            NotificationType.PostLike => s.PostReactions,
+            NotificationType.PostComment or NotificationType.CommentReply => s.Comments,
+            NotificationType.Mention => s.Mentions,
+            NotificationType.NewMessage => s.Messages,
+            NotificationType.GroupInvite => s.GroupInvites,
+            NotificationType.VideoCall => s.VideoCalls,
+            _ => true
+        };
     }
 }

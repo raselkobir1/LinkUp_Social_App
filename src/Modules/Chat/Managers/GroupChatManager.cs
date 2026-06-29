@@ -5,6 +5,9 @@ using LinkUp.Modules.Chat.DTOs;
 using LinkUp.Modules.Chat.Entities;
 using LinkUp.Modules.Chat.Interfaces;
 using LinkUp.Modules.Identity.Entities;
+using LinkUp.Modules.Notification.DTOs;
+using LinkUp.Modules.Notification.Interfaces;
+using LinkUp.SharedKernel.Enums;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,8 +16,20 @@ namespace LinkUp.Modules.Chat.Managers;
 public class GroupChatManager(
     ChatDbContext db,
     UserManager<ApplicationUser> userManager,
+    INotificationManager notificationManager,
     IMapper mapper) : IGroupChatManager
 {
+    private async Task NotifyGroupInviteAsync(Guid inviterId, IEnumerable<Guid> memberIds, Guid chatId, string groupName, CancellationToken ct)
+    {
+        var inviter = await userManager.FindByIdAsync(inviterId.ToString());
+        var inviterName = inviter?.FullName ?? "Someone";
+        foreach (var memberId in memberIds.Where(id => id != inviterId).Distinct())
+        {
+            await notificationManager.CreateNotificationAsync(new CreateNotificationDto(
+                memberId, inviterId, NotificationType.GroupInvite,
+                chatId, "Chat", $"{inviterName} added you to the group \"{groupName}\""), ct);
+        }
+    }
     // Retained for future AutoMapper-based projections
     private readonly IMapper _mapper = mapper;
     public async Task<GroupChatDetailsDto> CreateGroupAsync(
@@ -62,6 +77,8 @@ public class GroupChatManager(
         }
 
         await db.SaveChangesAsync(ct);
+
+        await NotifyGroupInviteAsync(creatorId, uniqueMembers, chat.Id, dto.Name, ct);
 
         return await BuildGroupDetailsDtoAsync(groupChat, chat.Id, ct);
     }
@@ -122,6 +139,13 @@ public class GroupChatManager(
         }
 
         await db.SaveChangesAsync(ct);
+
+        var groupName = await db.GroupChats
+            .Where(g => g.ChatId == chatId)
+            .Select(g => g.Name)
+            .FirstOrDefaultAsync(ct) ?? "a group";
+        var newMembers = dto.UserIds.Distinct().Where(id => !existingIds.Contains(id));
+        await NotifyGroupInviteAsync(userId, newMembers, chatId, groupName, ct);
     }
 
     public async Task RemoveMemberAsync(
