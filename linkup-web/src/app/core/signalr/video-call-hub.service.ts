@@ -1,28 +1,23 @@
 import { Injectable, OnDestroy } from '@angular/core';
-import { HubConnection, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
+import { HubConnection, HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr';
 import { Subject, BehaviorSubject } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../services/auth.service';
 
-export interface CallInfo {
-  callId: string;
-  callerId: string;
-  callerName: string;
-  callerProfilePicture?: string;
-  callType: 'OneToOne' | 'Group';
-}
-
 @Injectable({ providedIn: 'root' })
 export class VideoCallHubService implements OnDestroy {
-  private hub!: HubConnection;
+  private hub?: HubConnection;
+  private starting?: Promise<void>;
 
-  readonly callInitiated$ = new Subject<CallInfo>();
-  readonly callAccepted$ = new Subject<{ callId: string; userId: string }>();
-  readonly callDeclined$ = new Subject<{ callId: string; userId: string }>();
+  // Incoming call from someone else: (callId, callerId, callType)
+  readonly callInitiated$ = new Subject<{ callId: string; callerId: string; callType: string }>();
+  readonly callAccepted$ = new Subject<{ callId: string }>();
+  readonly callDeclined$ = new Subject<{ callId: string }>();
   readonly callEnded$ = new Subject<{ callId: string }>();
-  readonly iceCandidate$ = new Subject<{ callId: string; candidate: RTCIceCandidateInit; userId: string }>();
-  readonly sdpOffer$ = new Subject<{ callId: string; sdp: RTCSessionDescriptionInit; userId: string }>();
-  readonly sdpAnswer$ = new Subject<{ callId: string; sdp: RTCSessionDescriptionInit; userId: string }>();
+  // WebRTC signaling carries the *sender's* userId so the receiver knows the peer.
+  readonly iceCandidate$ = new Subject<{ candidate: RTCIceCandidateInit; fromUserId: string }>();
+  readonly sdpOffer$ = new Subject<{ sdp: RTCSessionDescriptionInit; fromUserId: string }>();
+  readonly sdpAnswer$ = new Subject<{ sdp: RTCSessionDescriptionInit; fromUserId: string }>();
   readonly cameraToggled$ = new Subject<{ userId: string; isOn: boolean }>();
   readonly micToggled$ = new Subject<{ userId: string; isOn: boolean }>();
   readonly screenShareStarted$ = new Subject<{ userId: string }>();
@@ -31,7 +26,11 @@ export class VideoCallHubService implements OnDestroy {
 
   constructor(private auth: AuthService) {}
 
+  /** Idempotent connect — safe to call from the shell and from the call screen. */
   async connect(): Promise<void> {
+    if (this.hub?.state === HubConnectionState.Connected) return;
+    if (this.starting) return this.starting;
+
     const token = this.auth.getAccessToken();
     this.hub = new HubConnectionBuilder()
       .withUrl(`${environment.hubUrl}/videocall`, { accessTokenFactory: () => token ?? '' })
@@ -39,34 +38,53 @@ export class VideoCallHubService implements OnDestroy {
       .configureLogging(LogLevel.Warning)
       .build();
 
-    this.hub.on('CallInitiated', (info: CallInfo) => this.callInitiated$.next(info));
-    this.hub.on('CallAccepted', (d: { callId: string; userId: string }) => this.callAccepted$.next(d));
-    this.hub.on('CallDeclined', (d: { callId: string; userId: string }) => this.callDeclined$.next(d));
-    this.hub.on('CallEnded', (d: { callId: string }) => this.callEnded$.next(d));
-    this.hub.on('IceCandidateReceived', (d: { callId: string; candidate: RTCIceCandidateInit; userId: string }) => this.iceCandidate$.next(d));
-    this.hub.on('SdpOfferReceived', (d: { callId: string; sdp: RTCSessionDescriptionInit; userId: string }) => this.sdpOffer$.next(d));
-    this.hub.on('SdpAnswerReceived', (d: { callId: string; sdp: RTCSessionDescriptionInit; userId: string }) => this.sdpAnswer$.next(d));
-    this.hub.on('CameraToggled', (d: { userId: string; isOn: boolean }) => this.cameraToggled$.next(d));
-    this.hub.on('MicToggled', (d: { userId: string; isOn: boolean }) => this.micToggled$.next(d));
-    this.hub.on('ScreenShareStarted', (d: { userId: string }) => this.screenShareStarted$.next(d));
-    this.hub.on('ScreenShareStopped', (d: { userId: string }) => this.screenShareStopped$.next(d));
+    // Backend sends POSITIONAL args (not a single object).
+    this.hub.on('CallInitiated', (callId: string, callerId: string, callType: string) =>
+      this.callInitiated$.next({ callId, callerId, callType }));
+    this.hub.on('CallAccepted', (callId: string) => this.callAccepted$.next({ callId }));
+    this.hub.on('CallDeclined', (callId: string) => this.callDeclined$.next({ callId }));
+    this.hub.on('CallEnded', (callId: string) => this.callEnded$.next({ callId }));
+    this.hub.on('IceCandidateReceived', (candidate: string, fromUserId: string) =>
+      this.iceCandidate$.next({ candidate: JSON.parse(candidate), fromUserId }));
+    this.hub.on('SdpOfferReceived', (sdp: string, fromUserId: string) =>
+      this.sdpOffer$.next({ sdp: JSON.parse(sdp), fromUserId }));
+    this.hub.on('SdpAnswerReceived', (sdp: string, fromUserId: string) =>
+      this.sdpAnswer$.next({ sdp: JSON.parse(sdp), fromUserId }));
+    this.hub.on('CameraToggled', (userId: string, isOn: boolean) => this.cameraToggled$.next({ userId, isOn }));
+    this.hub.on('MicToggled', (userId: string, isOn: boolean) => this.micToggled$.next({ userId, isOn }));
+    this.hub.on('ScreenShareStarted', (userId: string) => this.screenShareStarted$.next({ userId }));
+    this.hub.on('ScreenShareStopped', (userId: string) => this.screenShareStopped$.next({ userId }));
 
     this.hub.onreconnected(() => this.connected$.next(true));
     this.hub.onclose(() => this.connected$.next(false));
 
-    await this.hub.start();
+    this.starting = this.hub.start();
+    await this.starting;
+    this.starting = undefined;
     this.connected$.next(true);
   }
 
-  initiateCall(receiverId: string, callType: string): void { this.hub?.invoke('InitiateCall', receiverId, callType); }
-  acceptCall(callId: string): void { this.hub?.invoke('AcceptCall', callId); }
-  declineCall(callId: string): void { this.hub?.invoke('DeclineCall', callId); }
+  // ── Outbound invokes — argument order matches VideoCallHub server methods ──
+  initiateCall(targetUserId: string, callId: string, callType: string): void {
+    this.hub?.invoke('InitiateCall', targetUserId, callId, callType);
+  }
+  acceptCall(callerId: string, callId: string): void { this.hub?.invoke('AcceptCall', callerId, callId); }
+  declineCall(callerId: string, callId: string): void { this.hub?.invoke('DeclineCall', callerId, callId); }
   endCall(callId: string): void { this.hub?.invoke('EndCall', callId); }
-  sendIceCandidate(callId: string, targetUserId: string, candidate: RTCIceCandidateInit): void { this.hub?.invoke('SendIceCandidate', callId, targetUserId, candidate); }
-  sendSdpOffer(callId: string, targetUserId: string, sdp: RTCSessionDescriptionInit): void { this.hub?.invoke('SendSdpOffer', callId, targetUserId, sdp); }
-  sendSdpAnswer(callId: string, targetUserId: string, sdp: RTCSessionDescriptionInit): void { this.hub?.invoke('SendSdpAnswer', callId, targetUserId, sdp); }
+
+  sendIceCandidate(targetUserId: string, candidate: RTCIceCandidateInit): void {
+    this.hub?.invoke('SendIceCandidate', targetUserId, JSON.stringify(candidate));
+  }
+  sendSdpOffer(targetUserId: string, sdp: RTCSessionDescriptionInit): void {
+    this.hub?.invoke('SendSdpOffer', targetUserId, JSON.stringify(sdp));
+  }
+  sendSdpAnswer(targetUserId: string, sdp: RTCSessionDescriptionInit): void {
+    this.hub?.invoke('SendSdpAnswer', targetUserId, JSON.stringify(sdp));
+  }
   toggleCamera(callId: string, isOn: boolean): void { this.hub?.invoke('ToggleCamera', callId, isOn); }
   toggleMic(callId: string, isOn: boolean): void { this.hub?.invoke('ToggleMic', callId, isOn); }
+  startScreenShare(callId: string): void { this.hub?.invoke('StartScreenShare', callId); }
+  stopScreenShare(callId: string): void { this.hub?.invoke('StopScreenShare', callId); }
 
   async disconnect(): Promise<void> {
     await this.hub?.stop();

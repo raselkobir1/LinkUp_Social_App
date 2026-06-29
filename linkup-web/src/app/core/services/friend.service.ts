@@ -16,19 +16,19 @@ export class FriendService {
   }
 
   acceptRequest(requestId: string): Observable<ApiResponse<object>> {
-    return this.http.post<ApiResponse<object>>(`${this.base}/accept/${requestId}`, {});
+    return this.http.put<ApiResponse<object>>(`${this.base}/request/${requestId}/accept`, {});
   }
 
   rejectRequest(requestId: string): Observable<ApiResponse<object>> {
-    return this.http.post<ApiResponse<object>>(`${this.base}/reject/${requestId}`, {});
+    return this.http.put<ApiResponse<object>>(`${this.base}/request/${requestId}/reject`, {});
   }
 
   cancelRequest(requestId: string): Observable<ApiResponse<object>> {
-    return this.http.post<ApiResponse<object>>(`${this.base}/cancel/${requestId}`, {});
+    return this.http.delete<ApiResponse<object>>(`${this.base}/request/${requestId}`);
   }
 
   unfriend(userId: string): Observable<ApiResponse<object>> {
-    return this.http.delete<ApiResponse<object>>(`${this.base}/unfriend/${userId}`);
+    return this.http.delete<ApiResponse<object>>(`${this.base}/${userId}`);
   }
 
   getFriends(page = 1, pageSize = 20): Observable<ApiResponse<PagedResult<FriendDto>>> {

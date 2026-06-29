@@ -13,4 +13,10 @@ public class CommentDto
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public List<CommentDto>? Replies { get; set; }
+
+    // Flat fields consumed by the Angular client (derived from Author).
+    public Guid AuthorId => Author?.Id ?? Guid.Empty;
+    public string AuthorName => Author?.FullName ?? string.Empty;
+    public string? AuthorProfilePicture => Author?.ProfilePictureUrl;
+    public bool IsLiked => IsLikedByCurrentUser;
 }

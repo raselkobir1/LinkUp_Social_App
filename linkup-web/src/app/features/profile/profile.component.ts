@@ -10,6 +10,7 @@ import { ProfileService } from '../../core/services/profile.service';
 import { FriendService } from '../../core/services/friend.service';
 import { PostService } from '../../core/services/post.service';
 import { AuthService } from '../../core/services/auth.service';
+import { CallService } from '../../core/services/call.service';
 import { UserProfileDto } from '../../core/models/profile.model';
 import { PostDto } from '../../core/models/post.model';
 import { PostCardComponent } from '../feed/post-card/post-card.component';
@@ -32,6 +33,7 @@ export class ProfileComponent implements OnInit {
   private profileSvc = inject(ProfileService);
   private friendSvc = inject(FriendService);
   private postSvc = inject(PostService);
+  private callSvc = inject(CallService);
   auth = inject(AuthService);
 
   profile = signal<UserProfileDto | null>(null);
@@ -92,6 +94,10 @@ export class ProfileComponent implements OnInit {
         if (res.success) this.profile.update(p => p ? { ...p, profilePictureUrl: res.data.url } : p);
       }
     });
+  }
+
+  startVideoCall(): void {
+    this.callSvc.initiateCall(this.userId, 'OneToOne');
   }
 
   onPostCreated(post: PostDto): void {

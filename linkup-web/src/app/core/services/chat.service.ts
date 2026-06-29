@@ -16,7 +16,7 @@ export class ChatService {
   }
 
   getOrCreateDirectChat(otherUserId: string): Observable<ApiResponse<ChatListDto>> {
-    return this.http.post<ApiResponse<ChatListDto>>(`${this.base}/direct`, { otherUserId });
+    return this.http.post<ApiResponse<ChatListDto>>(`${this.base}/direct`, { targetUserId: otherUserId });
   }
 
   getMessages(chatId: string, page = 1, pageSize = 30): Observable<ApiResponse<PagedResult<MessageDto>>> {

@@ -92,4 +92,12 @@ public class FriendController(IFriendManager friendManager) : BaseApiController
         var result = await friendManager.GetFriendshipStatusAsync(CurrentUserId, userId, ct);
         return ApiOk(result);
     }
+
+    // GET api/v1/friends/suggestions
+    [HttpGet("suggestions")]
+    public async Task<IActionResult> GetSuggestions([FromQuery] int count = 10, CancellationToken ct = default)
+    {
+        var result = await friendManager.GetFriendSuggestionsAsync(CurrentUserId, count, ct);
+        return ApiOk(result);
+    }
 }

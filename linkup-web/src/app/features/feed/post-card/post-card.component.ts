@@ -113,7 +113,7 @@ export class PostCardComponent {
   }
 
   pinPost(): void {
-    this.postSvc.pin(this.post.id).subscribe({
+    this.postSvc.pin(this.post.id, !this.post.isPinned).subscribe({
       next: () => { this.post = { ...this.post, isPinned: !this.post.isPinned }; }
     });
   }

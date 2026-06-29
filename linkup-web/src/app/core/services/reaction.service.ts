@@ -20,6 +20,6 @@ export class ReactionService {
   }
 
   getCounts(targetId: string, targetType: 'Post' | 'Comment'): Observable<ApiResponse<Record<ReactionType, number>>> {
-    return this.http.get<ApiResponse<Record<ReactionType, number>>>(`${this.base}/${targetType}/${targetId}/counts`);
+    return this.http.get<ApiResponse<Record<ReactionType, number>>>(`${this.base}/${targetType}/${targetId}`);
   }
 }

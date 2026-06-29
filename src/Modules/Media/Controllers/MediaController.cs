@@ -15,8 +15,9 @@ public class MediaController(IMediaService mediaService) : BaseApiController
 {
     // POST api/v1/media/upload/image
     [HttpPost("upload/image")]
+    [Consumes("multipart/form-data")]
     [RequestSizeLimit(10 * 1024 * 1024)]
-    public async Task<IActionResult> UploadImage([FromForm] IFormFile file, CancellationToken ct)
+    public async Task<IActionResult> UploadImage(IFormFile file, CancellationToken ct)
     {
         var result = await mediaService.UploadImageAsync(file, AppConstants.Media.PostMediaFolder, CurrentUserId, ct);
         return ApiCreated(result, "Image uploaded successfully.");
@@ -24,8 +25,9 @@ public class MediaController(IMediaService mediaService) : BaseApiController
 
     // POST api/v1/media/upload/video
     [HttpPost("upload/video")]
+    [Consumes("multipart/form-data")]
     [RequestSizeLimit(100 * 1024 * 1024)]
-    public async Task<IActionResult> UploadVideo([FromForm] IFormFile file, CancellationToken ct)
+    public async Task<IActionResult> UploadVideo(IFormFile file, CancellationToken ct)
     {
         var result = await mediaService.UploadVideoAsync(file, AppConstants.Media.PostMediaFolder, CurrentUserId, ct);
         return ApiCreated(result, "Video uploaded successfully.");

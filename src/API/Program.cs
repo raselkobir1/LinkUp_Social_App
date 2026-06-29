@@ -17,6 +17,7 @@ using LinkUp.Modules.UserProfile.Configuration;
 using LinkUp.Modules.VideoCall.Configuration;
 using LinkUp.Modules.VideoCall.Hubs;
 using LinkUp.SharedKernel.Constants;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -34,7 +35,11 @@ builder.Host.UseSerilog((ctx, cfg) =>
        .WriteTo.File("logs/linkup-.log", rollingInterval: RollingInterval.Day));
 
 // ─── Controllers + FluentValidation ───────────────────────────────────────
-services.AddControllers();
+services.AddControllers()
+    .AddJsonOptions(o =>
+        // Serialize/accept enums as their string names so they match the Angular
+        // string-union enum types (PostType, ReactionType, MessageType, etc.).
+        o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 services.AddEndpointsApiExplorer();
 
 // ─── API Versioning ────────────────────────────────────────────────────────
@@ -157,8 +162,46 @@ services.AddVideoCallModule(configuration);
 services.AddSearchModule(configuration);
 services.AddAdminModule(configuration);
 
+// ─── Re-assert JWT as the default scheme ───────────────────────────────────
+// AddIdentity() (inside AddIdentityModule) resets the default authentication
+// scheme to the Identity application cookie. Since it runs after the JWT setup
+// above, we must re-assert JWT here so [Authorize] uses Bearer tokens, not cookies.
+services.AddAuthentication(options =>
+{
+    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+});
+
 // ─── Build ─────────────────────────────────────────────────────────────────
 var app = builder.Build();
+
+// ─── Apply EF Core migrations + seed on startup ────────────────────────────
+using (var scope = app.Services.CreateScope())
+{
+    var sp = scope.ServiceProvider;
+    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Migrations");
+    var contexts = new Microsoft.EntityFrameworkCore.DbContext[]
+    {
+        sp.GetRequiredService<LinkUp.Modules.Identity.Configuration.IdentityDbContext>(),
+        sp.GetRequiredService<LinkUp.Modules.UserProfile.Configuration.ProfileDbContext>(),
+        sp.GetRequiredService<LinkUp.Modules.Friend.Configuration.FriendDbContext>(),
+        sp.GetRequiredService<LinkUp.Modules.Media.Configuration.MediaDbContext>(),
+        sp.GetRequiredService<LinkUp.Modules.Post.Configuration.PostDbContext>(),
+        sp.GetRequiredService<LinkUp.Modules.Comment.Configuration.CommentDbContext>(),
+        sp.GetRequiredService<LinkUp.Modules.Reaction.Configuration.ReactionDbContext>(),
+        sp.GetRequiredService<LinkUp.Modules.Chat.Configuration.ChatDbContext>(),
+        sp.GetRequiredService<LinkUp.Modules.Notification.Configuration.NotificationDbContext>(),
+        sp.GetRequiredService<LinkUp.Modules.VideoCall.Configuration.VideoCallDbContext>(),
+    };
+    foreach (var ctx in contexts)
+    {
+        logger.LogInformation("Applying migrations for {Context}", ctx.GetType().Name);
+        await ctx.Database.MigrateAsync();
+    }
+
+    await LinkUp.Modules.Identity.Configuration.IdentitySeeder.SeedAsync(sp);
+}
 
 // ─── Middleware pipeline ───────────────────────────────────────────────────
 app.UseMiddleware<GlobalExceptionMiddleware>();

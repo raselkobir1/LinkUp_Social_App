@@ -19,7 +19,7 @@ export class ProfileService {
   }
 
   updateProfile(dto: UpdateProfileDto): Observable<ApiResponse<UserProfileDto>> {
-    return this.http.put<ApiResponse<UserProfileDto>>(`${this.base}/me`, dto);
+    return this.http.put<ApiResponse<UserProfileDto>>(this.base, dto);
   }
 
   uploadProfilePicture(file: File): Observable<ApiResponse<{ url: string }>> {

@@ -72,3 +72,29 @@
     <router-outlet></router-outlet>
   </main>
 </div>
+
+<!-- Incoming call banner -->
+@if (callService.incomingCall(); as call) {
+  <div class="fixed bottom-6 right-6 z-[100] bg-white rounded-2xl shadow-2xl border border-gray-200 p-5 w-80"
+    data-testid="incoming-call">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-12 h-12 rounded-full bg-[#1877f2] flex items-center justify-center animate-pulse">
+        <mat-icon class="text-white">videocam</mat-icon>
+      </div>
+      <div>
+        <p class="font-semibold text-gray-800">Incoming video call</p>
+        <p class="text-sm text-gray-400">Ringing…</p>
+      </div>
+    </div>
+    <div class="flex gap-3">
+      <button (click)="callService.acceptIncoming()" data-testid="accept-call"
+        class="flex-1 py-2 rounded-lg bg-green-500 text-white font-medium flex items-center justify-center gap-1">
+        <mat-icon class="text-base">call</mat-icon> Accept
+      </button>
+      <button (click)="callService.declineIncoming()" data-testid="decline-call"
+        class="flex-1 py-2 rounded-lg bg-red-500 text-white font-medium flex items-center justify-center gap-1">
+        <mat-icon class="text-base">call_end</mat-icon> Decline
+      </button>
+    </div>
+  </div>
+}

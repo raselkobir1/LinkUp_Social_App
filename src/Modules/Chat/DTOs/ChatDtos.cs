@@ -57,6 +57,11 @@ public class MessageDto
     public List<MessageAttachmentDto> Attachments { get; set; } = [];
     public List<MessageReadDto> Reads { get; set; } = [];
     public DateTime CreatedAt { get; set; }
+
+    // Flat fields consumed by the Angular client (derived from Sender).
+    public Guid SenderId => Sender.Id;
+    public string SenderName => Sender.FullName;
+    public string? SenderProfilePicture => Sender.ProfilePictureUrl;
 }
 
 public class ChatListItemDto
@@ -66,7 +71,13 @@ public class ChatListItemDto
     public string? GroupName { get; set; }
     public string? GroupPhotoUrl { get; set; }
     public List<MessageSenderDto> Participants { get; set; } = [];
-    public MessageDto? LastMessage { get; set; }
+    // Flat fields the Angular client binds to (populated for direct chats).
+    public Guid? OtherUserId { get; set; }
+    public string? OtherUserName { get; set; }
+    public string? OtherUserProfilePicture { get; set; }
+    public bool OtherUserIsOnline { get; set; }
+    public string? LastMessage { get; set; }
+    public DateTime? LastMessageAt { get; set; }
     public int UnreadCount { get; set; }
 }
 

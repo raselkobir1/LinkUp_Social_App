@@ -59,6 +59,16 @@
           {{ isCameraOff() ? 'videocam_off' : 'videocam' }}
         </mat-icon>
       </button>
+
+      <!-- Screen share -->
+      <button (click)="toggleScreenShare()"
+        class="w-14 h-14 rounded-full flex items-center justify-center transition-colors"
+        [class.bg-white]="!isScreenSharing()"
+        [class.bg-[#1877f2]]="isScreenSharing()">
+        <mat-icon [class.text-gray-800]="!isScreenSharing()" [class.text-white]="isScreenSharing()">
+          {{ isScreenSharing() ? 'stop_screen_share' : 'screen_share' }}
+        </mat-icon>
+      </button>
     </div>
   }
 </div>

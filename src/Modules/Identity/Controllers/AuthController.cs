@@ -33,9 +33,9 @@ public class AuthController(IAuthManager authManager) : BaseApiController
 
     [HttpPost("logout")]
     [Authorize]
-    public async Task<IActionResult> Logout([FromBody] string refreshToken, CancellationToken ct)
+    public async Task<IActionResult> Logout([FromBody] LogoutDto dto, CancellationToken ct)
     {
-        await authManager.LogoutAsync(refreshToken, ct);
+        await authManager.LogoutAsync(dto.RefreshToken, ct);
         return ApiOk<object>(null!, "Logged out successfully.");
     }
 

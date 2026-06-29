@@ -13,9 +13,15 @@ public class ProfileManager(ProfileDbContext db, IMapper mapper) : IProfileManag
     public async Task<UserProfileDto> GetProfileAsync(Guid userId, Guid viewerId, CancellationToken ct = default)
     {
         var profile = await db.Profiles
-            .AsNoTracking()
-            .FirstOrDefaultAsync(p => p.UserId == userId && !p.IsDeleted, ct)
-            ?? throw new NotFoundException("Profile", userId);
+            .FirstOrDefaultAsync(p => p.UserId == userId && !p.IsDeleted, ct);
+
+        // Profiles are created lazily on first access — every authenticated user has one.
+        if (profile is null)
+        {
+            profile = new Entities.UserProfile { UserId = userId };
+            db.Profiles.Add(profile);
+            await db.SaveChangesAsync(ct);
+        }
 
         return mapper.Map<UserProfileDto>(profile);
     }
@@ -23,8 +29,13 @@ public class ProfileManager(ProfileDbContext db, IMapper mapper) : IProfileManag
     public async Task<UserProfileDto> UpdateProfileAsync(Guid userId, UpdateProfileDto dto, CancellationToken ct = default)
     {
         var profile = await db.Profiles
-            .FirstOrDefaultAsync(p => p.UserId == userId && !p.IsDeleted, ct)
-            ?? throw new NotFoundException("Profile", userId);
+            .FirstOrDefaultAsync(p => p.UserId == userId && !p.IsDeleted, ct);
+
+        if (profile is null)
+        {
+            profile = new Entities.UserProfile { UserId = userId };
+            db.Profiles.Add(profile);
+        }
 
         profile.Bio = dto.Bio;
         profile.Gender = dto.Gender;

@@ -53,8 +53,8 @@ public class IdentityDbContext(DbContextOptions<IdentityDbContext> options)
         var userRoleId = Guid.Parse("4b162b3e-4e38-45c3-8697-25c5d5e3c3d5");
 
         builder.Entity<ApplicationRole>().HasData(
-            new ApplicationRole { Id = adminRoleId, Name = AppConstants.Roles.Admin, NormalizedName = AppConstants.Roles.Admin.ToUpper() },
-            new ApplicationRole { Id = userRoleId, Name = AppConstants.Roles.User, NormalizedName = AppConstants.Roles.User.ToUpper() }
+            new ApplicationRole { Id = adminRoleId, Name = AppConstants.Roles.Admin, NormalizedName = AppConstants.Roles.Admin.ToUpper(), ConcurrencyStamp = "1167b627-534b-443e-a1a7-e53e146b0937" },
+            new ApplicationRole { Id = userRoleId, Name = AppConstants.Roles.User, NormalizedName = AppConstants.Roles.User.ToUpper(), ConcurrencyStamp = "8b1f7cae-ff70-4823-a58d-86c4f9618ae6" }
         );
     }
 }

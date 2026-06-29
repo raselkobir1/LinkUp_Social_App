@@ -39,8 +39,10 @@ export class PostService {
     return this.http.delete<ApiResponse<object>>(`${this.base}/${id}`);
   }
 
-  pin(id: string): Observable<ApiResponse<object>> {
-    return this.http.patch<ApiResponse<object>>(`${this.base}/${id}/pin`, {});
+  pin(id: string, pin: boolean): Observable<ApiResponse<object>> {
+    return this.http.patch<ApiResponse<object>>(`${this.base}/${id}/pin`, {}, {
+      params: new HttpParams().set('pin', pin)
+    });
   }
 
   share(dto: SharePostDto): Observable<ApiResponse<PostDto>> {

@@ -30,6 +30,10 @@ public class NotificationDto
     public DateTime? ReadAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public SenderInfoDto? Sender { get; set; }
+
+    // Flat fields consumed by the Angular client (derived from Sender).
+    public string? SenderName => Sender?.FullName;
+    public string? SenderProfilePicture => Sender?.ProfilePictureUrl;
 }
 
 public class NotificationCountDto

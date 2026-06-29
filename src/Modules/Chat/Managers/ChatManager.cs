@@ -459,6 +459,15 @@ public class ChatManager(
                     FullName = user.FullName,
                     ProfilePictureUrl = user.ProfilePictureUrl
                 });
+
+                // For direct chats, surface the "other" participant as flat fields.
+                if (!chat.IsGroup && pid != currentUserId)
+                {
+                    dto.OtherUserId = pid;
+                    dto.OtherUserName = user.FullName;
+                    dto.OtherUserProfilePicture = user.ProfilePictureUrl;
+                    dto.OtherUserIsOnline = user.IsOnline;
+                }
             }
         }
         dto.Participants = participants;
@@ -470,7 +479,12 @@ public class ChatManager(
             .FirstOrDefaultAsync(ct);
 
         if (lastMessage is not null)
-            dto.LastMessage = await BuildMessageDtoAsync(lastMessage, currentUserId, ct);
+        {
+            dto.LastMessage = string.IsNullOrEmpty(lastMessage.Content)
+                ? "[attachment]"
+                : lastMessage.Content;
+            dto.LastMessageAt = lastMessage.CreatedAt;
+        }
 
         // Unread count (messages sent after the last MessageRead by currentUserId)
         var lastReadAt = await db.MessageReads
