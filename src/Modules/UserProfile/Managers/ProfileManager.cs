@@ -23,6 +23,19 @@ public class ProfileManager(ProfileDbContext db, IMapper mapper, UserManager<App
         return profile;
     }
 
+    // Maps the profile and fills FirstName/LastName from ApplicationUser (the client reads them).
+    private async Task<UserProfileDto> ToDtoAsync(Entities.UserProfile profile)
+    {
+        var dto = mapper.Map<UserProfileDto>(profile);
+        var user = await userManager.FindByIdAsync(profile.UserId.ToString());
+        if (user is not null)
+        {
+            dto.FirstName = user.FirstName;
+            dto.LastName = user.LastName;
+        }
+        return dto;
+    }
+
     private async Task SyncUserAvatarAsync(Guid userId, string? pictureUrl, string? coverUrl)
     {
         // Friends/posts/chat DTOs read the avatar from ApplicationUser, so keep it in sync.
@@ -46,7 +59,7 @@ public class ProfileManager(ProfileDbContext db, IMapper mapper, UserManager<App
             await db.SaveChangesAsync(ct);
         }
 
-        return mapper.Map<UserProfileDto>(profile);
+        return await ToDtoAsync(profile);
     }
 
     public async Task<UserProfileDto> UpdateProfileAsync(Guid userId, UpdateProfileDto dto, CancellationToken ct = default)
@@ -62,13 +75,29 @@ public class ProfileManager(ProfileDbContext db, IMapper mapper, UserManager<App
 
         profile.Bio = dto.Bio;
         profile.Gender = dto.Gender;
-        profile.Birthday = dto.Birthday;
+        // Npgsql requires UTC for 'timestamp with time zone'; the client sends a
+        // date-only value that deserializes with Kind=Unspecified.
+        var dob = dto.DateOfBirth ?? dto.Birthday;
+        profile.Birthday = dob.HasValue ? DateTime.SpecifyKind(dob.Value, DateTimeKind.Utc) : null;
         profile.Location = dto.Location;
         profile.Website = dto.Website;
         profile.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
-        return mapper.Map<UserProfileDto>(profile);
+
+        // FirstName/LastName live on ApplicationUser — keep them in sync.
+        if (dto.FirstName is not null || dto.LastName is not null)
+        {
+            var user = await userManager.FindByIdAsync(userId.ToString());
+            if (user is not null)
+            {
+                if (dto.FirstName is not null) user.FirstName = dto.FirstName;
+                if (dto.LastName is not null) user.LastName = dto.LastName;
+                await userManager.UpdateAsync(user);
+            }
+        }
+
+        return await ToDtoAsync(profile);
     }
 
     public async Task<UserProfileDto> GetOrCreateProfileAsync(Guid userId, CancellationToken ct = default)
@@ -83,7 +112,7 @@ public class ProfileManager(ProfileDbContext db, IMapper mapper, UserManager<App
             await db.SaveChangesAsync(ct);
         }
 
-        return mapper.Map<UserProfileDto>(profile);
+        return await ToDtoAsync(profile);
     }
 
     public async Task<UserProfileDto> UploadProfilePictureAsync(Guid userId, string url, CancellationToken ct = default)
@@ -94,7 +123,7 @@ public class ProfileManager(ProfileDbContext db, IMapper mapper, UserManager<App
 
         await db.SaveChangesAsync(ct);
         await SyncUserAvatarAsync(userId, url, null);
-        return mapper.Map<UserProfileDto>(profile);
+        return await ToDtoAsync(profile);
     }
 
     public async Task<UserProfileDto> UploadCoverPhotoAsync(Guid userId, string url, CancellationToken ct = default)
@@ -105,7 +134,7 @@ public class ProfileManager(ProfileDbContext db, IMapper mapper, UserManager<App
 
         await db.SaveChangesAsync(ct);
         await SyncUserAvatarAsync(userId, null, url);
-        return mapper.Map<UserProfileDto>(profile);
+        return await ToDtoAsync(profile);
     }
 
     // --- Education ---

@@ -87,14 +87,34 @@ public class ReactionManager(
                     await notificationManager.CreateNotificationAsync(new CreateNotificationDto(
                         aid, userId, NotificationType.PostLike,
                         dto.TargetId, "Post", $"{actor?.FullName ?? "Someone"} reacted to your post"), ct);
+                    await SyncTargetReactionCountAsync(dto.TargetType, dto.TargetId, ct);
                     return await GetReactionCountsAsync(dto.TargetType, dto.TargetId, userId, ct);
                 }
             }
         }
 
         await db.SaveChangesAsync(ct);
+        await SyncTargetReactionCountAsync(dto.TargetType, dto.TargetId, ct);
 
         return await GetReactionCountsAsync(dto.TargetType, dto.TargetId, userId, ct);
+    }
+
+    /// <summary>
+    /// Keeps the denormalized Post.ReactionCount in sync with the actual number of
+    /// reactions, so the feed shows correct like counts. Recomputed rather than
+    /// incremented to stay correct across add/update/remove and to self-heal.
+    /// </summary>
+    private async Task SyncTargetReactionCountAsync(string targetType, Guid targetId, CancellationToken ct)
+    {
+        if (!string.Equals(targetType, "Post", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var count = await db.Reactions
+            .CountAsync(r => r.TargetId == targetId && r.TargetType == targetType, ct);
+
+        await postDb.Posts
+            .Where(p => p.Id == targetId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.ReactionCount, count), ct);
     }
 
     public async Task<ReactionCountDto> RemoveReactionAsync(
@@ -112,6 +132,7 @@ public class ReactionManager(
 
         db.Reactions.Remove(reaction);
         await db.SaveChangesAsync(ct);
+        await SyncTargetReactionCountAsync(targetType, targetId, ct);
 
         return await GetReactionCountsAsync(targetType, targetId, userId, ct);
     }
