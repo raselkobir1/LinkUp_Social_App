@@ -5,16 +5,15 @@ import { VideoCallHubService } from '../signalr/video-call-hub.service';
 export interface IncomingCall {
   callId: string;
   callerId: string;
-  callType: string; // 'video' | 'audio'
+  mediaType: string;  // 'video' | 'audio'
+  isGroup: boolean;
 }
 
-/** Context handed to the VideoCallComponent when it opens for a given call. */
 export interface CallContext {
   callId: string;
-  peerId: string;
-  peerName?: string;
-  isCaller: boolean;
+  isGroup: boolean;
   video: boolean;
+  invitees: { id: string; name?: string }[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -22,40 +21,37 @@ export class CallService {
   private hub = inject(VideoCallHubService);
   private router = inject(Router);
 
-  /** Set while an incoming call is ringing (shown by the shell banner). */
   readonly incomingCall = signal<IncomingCall | null>(null);
-
   private contexts = new Map<string, CallContext>();
 
-  /** Connect the signaling hub app-wide and start listening for incoming calls. */
   async init(): Promise<void> {
     await this.hub.connect();
     (window as any).__callHubConnected = true;
-    this.hub.callInitiated$.subscribe(c =>
-      this.incomingCall.set({ callId: c.callId, callerId: c.callerId, callType: c.callType }));
-    // If the caller hangs up before we answer, clear the banner.
-    this.hub.callEnded$.subscribe(({ callId }) => {
-      if (this.incomingCall()?.callId === callId) this.incomingCall.set(null);
-    });
+    this.hub.callRinging$.subscribe(c =>
+      this.incomingCall.set({ callId: c.callId, callerId: c.callerId, mediaType: c.mediaType, isGroup: c.isGroup }));
+    this.hub.participantLeft$.subscribe(() => { /* handled in call screen */ });
   }
 
-  /** Start an outgoing call to a user and open the call screen as the caller. */
+  /** Start a 1:1 call. */
   initiateCall(targetUserId: string, mode: 'video' | 'audio' = 'video', peerName?: string): void {
     const callId = crypto.randomUUID();
-    this.contexts.set(callId, { callId, peerId: targetUserId, peerName, isCaller: true, video: mode === 'video' });
-    // The media mode rides along in callType so the callee sets up the same way.
-    this.hub.initiateCall(targetUserId, callId, mode);
+    this.contexts.set(callId, { callId, isGroup: false, video: mode === 'video', invitees: [{ id: targetUserId, name: peerName }] });
+    this.hub.startCall(callId, [targetUserId], mode, false);
     this.router.navigate(['/video-call', callId]);
   }
 
-  /** Accept the ringing call and open the call screen as the callee. */
+  /** Start a group call with multiple invitees. */
+  initiateGroupCall(invitees: { id: string; name?: string }[], mode: 'video' | 'audio' = 'video'): void {
+    const callId = crypto.randomUUID();
+    this.contexts.set(callId, { callId, isGroup: true, video: mode === 'video', invitees });
+    this.hub.startCall(callId, invitees.map(i => i.id), mode, true);
+    this.router.navigate(['/video-call', callId]);
+  }
+
   acceptIncoming(): void {
     const call = this.incomingCall();
     if (!call) return;
-    this.contexts.set(call.callId, {
-      callId: call.callId, peerId: call.callerId, isCaller: false, video: call.callType !== 'audio'
-    });
-    this.hub.acceptCall(call.callerId, call.callId);
+    this.contexts.set(call.callId, { callId: call.callId, isGroup: call.isGroup, video: call.mediaType !== 'audio', invitees: [] });
     this.incomingCall.set(null);
     this.router.navigate(['/video-call', call.callId]);
   }
@@ -63,16 +59,10 @@ export class CallService {
   declineIncoming(): void {
     const call = this.incomingCall();
     if (!call) return;
-    this.hub.declineCall(call.callerId, call.callId);
+    this.hub.declineCall(call.callId, call.callerId);
     this.incomingCall.set(null);
   }
 
-  /** Retrieve (and consume) the context for a call the component is about to open. */
-  getContext(callId: string): CallContext | undefined {
-    return this.contexts.get(callId);
-  }
-
-  clearContext(callId: string): void {
-    this.contexts.delete(callId);
-  }
+  getContext(callId: string): CallContext | undefined { return this.contexts.get(callId); }
+  clearContext(callId: string): void { this.contexts.delete(callId); }
 }

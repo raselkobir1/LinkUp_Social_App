@@ -252,6 +252,119 @@ public class VideoCallManager(
     }
 
     // -------------------------------------------------------------------------
+    // Recording hooks (called by the hub; persist for call history, no broadcast)
+    // -------------------------------------------------------------------------
+
+    public async Task RecordCallStartAsync(Guid callId, Guid callerId, IEnumerable<Guid> inviteeIds, CallType type, CancellationToken ct = default)
+    {
+        if (await db.Calls.AnyAsync(c => c.Id == callId, ct)) return;
+
+        var call = new Call
+        {
+            Id = callId,
+            InitiatedById = callerId,
+            Type = type,
+            Status = CallStatus.Initiated,
+            CreatedById = callerId
+        };
+        call.Participants.Add(new CallParticipant { CallId = callId, UserId = callerId, Status = "Joined", JoinedAt = DateTime.UtcNow });
+        foreach (var inviteeId in inviteeIds.Distinct().Where(i => i != callerId))
+            call.Participants.Add(new CallParticipant { CallId = callId, UserId = inviteeId, Status = "Invited" });
+
+        db.Calls.Add(call);
+        await db.SaveChangesAsync(ct);
+    }
+
+    // These use ExecuteUpdate (direct SQL, no entity tracking) so concurrent calls
+    // from multiple participants never trip EF's optimistic-concurrency check.
+
+    public async Task RecordInviteAsync(Guid callId, Guid inviteeId, CancellationToken ct = default)
+    {
+        if (!await db.Calls.AnyAsync(c => c.Id == callId, ct)) return;
+        await db.Calls.Where(c => c.Id == callId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.Type, CallType.Group)
+                .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), ct);
+        if (!await db.CallParticipants.AnyAsync(p => p.CallId == callId && p.UserId == inviteeId, ct))
+        {
+            db.CallParticipants.Add(new CallParticipant { CallId = callId, UserId = inviteeId, Status = "Invited" });
+            await db.SaveChangesAsync(ct);
+        }
+    }
+
+    public async Task RecordJoinAsync(Guid callId, Guid userId, CancellationToken ct = default)
+    {
+        if (!await db.Calls.AnyAsync(c => c.Id == callId, ct)) return;
+        var now = DateTime.UtcNow;
+
+        var rows = await db.CallParticipants
+            .Where(p => p.CallId == callId && p.UserId == userId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(p => p.Status, "Joined")
+                .SetProperty(p => p.JoinedAt, p => p.JoinedAt ?? now)
+                .SetProperty(p => p.LeftAt, (DateTime?)null), ct);
+
+        if (rows == 0)
+        {
+            db.CallParticipants.Add(new CallParticipant { CallId = callId, UserId = userId, Status = "Joined", JoinedAt = now });
+            await db.SaveChangesAsync(ct);
+        }
+
+        await db.Calls.Where(c => c.Id == callId && c.Status == CallStatus.Initiated)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.Status, CallStatus.Ongoing)
+                .SetProperty(c => c.StartedAt, c => c.StartedAt ?? now)
+                .SetProperty(c => c.UpdatedAt, now), ct);
+    }
+
+    public async Task RecordDeclineAsync(Guid callId, Guid userId, CancellationToken ct = default)
+    {
+        await db.CallParticipants
+            .Where(p => p.CallId == callId && p.UserId == userId && p.Status != "Joined")
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.Status, "Declined"), ct);
+
+        var call = await db.Calls.AsNoTracking().FirstOrDefaultAsync(c => c.Id == callId, ct);
+        if (call is null || call.Status != CallStatus.Initiated) return;
+
+        var others = await db.CallParticipants.AsNoTracking()
+            .Where(p => p.CallId == callId && p.UserId != call.InitiatedById).ToListAsync(ct);
+        if (others.Count > 0 && others.All(p => p.Status == "Declined"))
+        {
+            var now = DateTime.UtcNow;
+            await db.Calls.Where(c => c.Id == callId)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(c => c.Status, CallStatus.Declined)
+                    .SetProperty(c => c.EndedAt, now)
+                    .SetProperty(c => c.UpdatedAt, now), ct);
+        }
+    }
+
+    public async Task RecordLeaveAsync(Guid callId, Guid userId, CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        await db.CallParticipants
+            .Where(p => p.CallId == callId && p.UserId == userId && p.Status == "Joined" && p.LeftAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.LeftAt, now), ct);
+
+        var call = await db.Calls.AsNoTracking().FirstOrDefaultAsync(c => c.Id == callId, ct);
+        if (call is null || call.Status == CallStatus.Ended) return;
+
+        var stillJoined = await db.CallParticipants
+            .AnyAsync(p => p.CallId == callId && p.Status == "Joined" && p.LeftAt == null, ct);
+        if (!stillJoined)
+        {
+            var endStatus = call.Status == CallStatus.Initiated ? CallStatus.Missed : CallStatus.Ended;
+            int? duration = call.StartedAt.HasValue ? (int)(now - call.StartedAt.Value).TotalSeconds : null;
+            await db.Calls.Where(c => c.Id == callId)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(c => c.Status, endStatus)
+                    .SetProperty(c => c.EndedAt, now)
+                    .SetProperty(c => c.DurationSeconds, duration)
+                    .SetProperty(c => c.UpdatedAt, now), ct);
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
 

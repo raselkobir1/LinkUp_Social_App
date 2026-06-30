@@ -18,6 +18,7 @@ export const routes: Routes = [
       { path: 'friends', loadComponent: () => import('./features/friends/friends.component').then(m => m.FriendsComponent) },
       { path: 'messages', loadComponent: () => import('./features/chat/chat.component').then(m => m.ChatComponent) },
       { path: 'messages/:chatId', loadComponent: () => import('./features/chat/chat.component').then(m => m.ChatComponent) },
+      { path: 'calls', loadComponent: () => import('./features/calls/call-history.component').then(m => m.CallHistoryComponent) },
       { path: 'notifications', loadComponent: () => import('./features/notifications/notifications.component').then(m => m.NotificationsComponent) },
       { path: 'search', loadComponent: () => import('./features/search/search.component').then(m => m.SearchComponent) },
       { path: 'admin', loadChildren: () => import('./features/admin/admin.routes').then(m => m.adminRoutes) },

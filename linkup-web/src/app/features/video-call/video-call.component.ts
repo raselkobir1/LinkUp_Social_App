@@ -1,26 +1,49 @@
-import { Component, inject, OnInit, OnDestroy, signal, ViewChild, ElementRef, Input } from '@angular/core';
+import {
+  Component, Directive, Input, inject, OnInit, OnDestroy, signal, ViewChild, ElementRef
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { Router } from '@angular/router';
 import { VideoCallHubService } from '../../core/signalr/video-call-hub.service';
 import { CallService } from '../../core/services/call.service';
+import { FriendService } from '../../core/services/friend.service';
 import { Subscription } from 'rxjs';
+
+/** Binds a MediaStream to a <video> element (Angular has no built-in srcObject binding). */
+@Directive({ selector: '[appSrcObject]', standalone: true })
+export class SrcObjectDirective {
+  constructor(private el: ElementRef<HTMLVideoElement>) {}
+  @Input() set appSrcObject(stream: MediaStream | null) {
+    this.el.nativeElement.srcObject = stream ?? null;
+  }
+}
+
+interface PeerConn {
+  pc: RTCPeerConnection;
+  pendingCandidates: RTCIceCandidateInit[];
+  remoteSet: boolean;
+}
+
+interface RemoteTile {
+  userId: string;
+  stream: MediaStream | null;
+}
 
 @Component({
   selector: 'app-video-call',
   standalone: true,
-  imports: [CommonModule, MatIconModule, MatButtonModule],
+  imports: [CommonModule, MatIconModule, MatButtonModule, SrcObjectDirective],
   templateUrl: './video-call.component.html',
   styleUrls: ['./video-call.component.scss']
 })
 export class VideoCallComponent implements OnInit, OnDestroy {
   @ViewChild('localVideo') localVideoRef!: ElementRef<HTMLVideoElement>;
-  @ViewChild('remoteVideo') remoteVideoRef!: ElementRef<HTMLVideoElement>;
   @Input() callId!: string;
 
   private hub = inject(VideoCallHubService);
   private callSvc = inject(CallService);
+  private friendSvc = inject(FriendService);
   private router = inject(Router);
 
   callStatus = signal<'connecting' | 'active' | 'ended'>('connecting');
@@ -28,167 +51,157 @@ export class VideoCallComponent implements OnInit, OnDestroy {
   isCameraOff = signal(false);
   isScreenSharing = signal(false);
   isVideoCall = signal(true);
-  peerName = signal('');
+  isGroup = signal(false);
   duration = signal(0);
+  remoteTiles = signal<RemoteTile[]>([]);
+  showInvite = signal(false);
+  friends = signal<{ userId: string; fullName: string; profilePictureUrl?: string }[]>([]);
 
   private durationTimer?: ReturnType<typeof setInterval>;
   private subs: Subscription[] = [];
-  private pc?: RTCPeerConnection;
+  private conns = new Map<string, PeerConn>();
   private localStream?: MediaStream;
   private cameraTrack?: MediaStreamTrack;
-  private peerId = '';
-  private isCaller = false;
-  private pendingCandidates: RTCIceCandidateInit[] = [];
-  private remoteSet = false;
-  private peerAccepted = false;          // caller: peer pressed Accept
-  private offerMade = false;
-  private pendingOffer?: RTCSessionDescriptionInit;  // callee: offer that arrived before pc was ready
 
   async ngOnInit(): Promise<void> {
     const ctx = this.callSvc.getContext(this.callId);
-    if (!ctx) {
-      // No context (e.g. opened directly) — nothing to negotiate.
-      this.callStatus.set('ended');
-      this.updateHook();
-      return;
-    }
-    this.peerId = ctx.peerId;
-    this.isCaller = ctx.isCaller;
+    if (!ctx) { this.callStatus.set('ended'); this.updateHook(); return; }
     this.isVideoCall.set(ctx.video);
+    this.isGroup.set(ctx.isGroup);
     this.isCameraOff.set(!ctx.video);
-    this.peerName.set(ctx.peerName ?? '');
     this.updateHook();
 
     await this.hub.connect();
     this.wireSignaling();
-    await this.initWebRTC();
+    await this.initLocalMedia();
+    // Join only after media + handlers are ready, so we never miss the participant list.
+    this.hub.joinCall(this.callId);
   }
 
   private wireSignaling(): void {
     this.subs.push(
-      // Caller: peer accepted → create and send the offer (once pc is ready).
-      this.hub.callAccepted$.subscribe(({ callId }) => {
-        if (callId === this.callId && this.isCaller) { this.peerAccepted = true; this.tryMakeOffer(); }
+      // Newcomer: offer every participant already in the room.
+      this.hub.existingParticipants$.subscribe(({ userIds }) => {
+        userIds.forEach(id => { this.ensurePeer(id); this.makeOffer(id); });
+      }),
+      // Someone new joined — they will offer us; just show a placeholder tile.
+      this.hub.participantJoined$.subscribe(({ userId }) => this.ensurePeer(userId)),
+      this.hub.participantLeft$.subscribe(({ userId }) => this.removePeer(userId)),
+
+      this.hub.sdpOffer$.subscribe(({ callId, sdp, fromUserId }) => {
+        if (callId === this.callId) this.handleOffer(fromUserId, sdp);
+      }),
+      this.hub.sdpAnswer$.subscribe(({ callId, sdp, fromUserId }) => {
+        if (callId === this.callId) this.handleAnswer(fromUserId, sdp);
+      }),
+      this.hub.iceCandidate$.subscribe(({ callId, candidate, fromUserId }) => {
+        if (callId === this.callId) this.addIce(fromUserId, candidate);
       }),
 
-      // Callee: received the offer → answer it (buffer if pc not ready yet).
-      this.hub.sdpOffer$.subscribe(({ sdp, fromUserId }) => {
-        this.peerId = fromUserId || this.peerId;
-        if (this.pc) this.handleOffer(sdp); else this.pendingOffer = sdp;
-      }),
-
-      // Caller: received the answer.
-      this.hub.sdpAnswer$.subscribe(async ({ sdp }) => {
-        if (!this.pc) return;
-        await this.pc.setRemoteDescription(new RTCSessionDescription(sdp));
-        this.remoteSet = true;
-        await this.flushCandidates();
-      }),
-
-      this.hub.iceCandidate$.subscribe(async ({ candidate }) => {
-        if (!this.pc) return;
-        if (this.remoteSet) await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
-        else this.pendingCandidates.push(candidate);
-      }),
-
-      this.hub.callEnded$.subscribe(({ callId }) => { if (callId === this.callId) this.remoteHangup(); }),
-      this.hub.callDeclined$.subscribe(({ callId }) => { if (callId === this.callId) this.remoteHangup(); }),
-
-      this.hub.cameraToggled$.subscribe(() => {}),
-      this.hub.micToggled$.subscribe(() => {})
+      this.hub.callDeclined$.subscribe(({ callId }) => {
+        // 1:1 invitee declined and nobody else is here → end.
+        if (callId === this.callId && !this.isGroup() && this.conns.size === 0) this.endLocally();
+      })
     );
   }
 
-  /** getUserMedia that survives a transient stall — race each attempt against a timeout, retry a few times. */
-  private async getMedia(): Promise<MediaStream> {
+  // ── Peer connection management (mesh) ──
+  private ensurePeer(userId: string): PeerConn {
+    let entry = this.conns.get(userId);
+    if (entry) return entry;
+
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    entry = { pc, pendingCandidates: [], remoteSet: false };
+    this.conns.set(userId, entry);
+    this.remoteTiles.update(t => t.some(x => x.userId === userId) ? t : [...t, { userId, stream: null }]);
+
+    this.localStream?.getTracks().forEach(track => pc.addTrack(track, this.localStream!));
+
+    pc.ontrack = e => {
+      this.remoteTiles.update(t => t.map(x => x.userId === userId ? { ...x, stream: e.streams[0] } : x));
+      this.markActive();
+    };
+    pc.onicecandidate = e => {
+      if (e.candidate) this.hub.sendIceCandidate(this.callId, userId, e.candidate.toJSON());
+    };
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'connected') this.markActive();
+      this.updateHook();
+    };
+    this.updateHook();
+    return entry;
+  }
+
+  private async makeOffer(userId: string): Promise<void> {
+    const { pc } = this.ensurePeer(userId);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    this.hub.sendSdpOffer(this.callId, userId, offer);
+  }
+
+  private async handleOffer(userId: string, sdp: RTCSessionDescriptionInit): Promise<void> {
+    const entry = this.ensurePeer(userId);
+    await entry.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    entry.remoteSet = true;
+    await this.flush(userId);
+    const answer = await entry.pc.createAnswer();
+    await entry.pc.setLocalDescription(answer);
+    this.hub.sendSdpAnswer(this.callId, userId, answer);
+  }
+
+  private async handleAnswer(userId: string, sdp: RTCSessionDescriptionInit): Promise<void> {
+    const entry = this.conns.get(userId);
+    if (!entry) return;
+    await entry.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    entry.remoteSet = true;
+    await this.flush(userId);
+  }
+
+  private async addIce(userId: string, candidate: RTCIceCandidateInit): Promise<void> {
+    const entry = this.ensurePeer(userId);
+    if (entry.remoteSet) await entry.pc.addIceCandidate(new RTCIceCandidate(candidate));
+    else entry.pendingCandidates.push(candidate);
+  }
+
+  private async flush(userId: string): Promise<void> {
+    const entry = this.conns.get(userId);
+    if (!entry) return;
+    while (entry.pendingCandidates.length) {
+      await entry.pc.addIceCandidate(new RTCIceCandidate(entry.pendingCandidates.shift()!));
+    }
+  }
+
+  private removePeer(userId: string): void {
+    const entry = this.conns.get(userId);
+    if (entry) { entry.pc.close(); this.conns.delete(userId); }
+    this.remoteTiles.update(t => t.filter(x => x.userId !== userId));
+    this.updateHook();
+    // In a 1:1 call, the other party leaving ends the call.
+    if (!this.isGroup() && this.conns.size === 0) this.endLocally();
+  }
+
+  private markActive(): void {
+    if (this.callStatus() === 'connecting') {
+      this.callStatus.set('active');
+      this.durationTimer = setInterval(() => this.duration.update(d => d + 1), 1000);
+    }
+    this.updateHook();
+  }
+
+  /** getUserMedia that survives a transient stall — retry a few times. */
+  private async initLocalMedia(): Promise<void> {
     const constraints = { video: this.isVideoCall(), audio: true };
     const withTimeout = (p: Promise<MediaStream>, ms: number) =>
       Promise.race([p, new Promise<MediaStream>((_, rej) => setTimeout(() => rej(new Error('gum-timeout')), ms))]);
-    let lastErr: unknown;
     for (let i = 0; i < 3; i++) {
-      try { return await withTimeout(navigator.mediaDevices.getUserMedia(constraints), 5000); }
-      catch (e) { lastErr = e; }
+      try { this.localStream = await withTimeout(navigator.mediaDevices.getUserMedia(constraints), 5000); break; }
+      catch { if (i === 2) { this.callStatus.set('ended'); this.updateHook(); return; } }
     }
-    throw lastErr;
+    this.cameraTrack = this.localStream!.getVideoTracks()[0];
+    if (this.localVideoRef?.nativeElement) this.localVideoRef.nativeElement.srcObject = this.localStream!;
   }
 
-  private async initWebRTC(): Promise<void> {
-    try {
-      this.localStream = await this.getMedia();
-      this.cameraTrack = this.localStream.getVideoTracks()[0];
-      if (this.localVideoRef?.nativeElement) {
-        this.localVideoRef.nativeElement.srcObject = this.localStream;
-      }
-
-      this.pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-      });
-
-      this.localStream.getTracks().forEach(track => this.pc!.addTrack(track, this.localStream!));
-
-      this.pc.ontrack = event => {
-        if (this.remoteVideoRef?.nativeElement) {
-          this.remoteVideoRef.nativeElement.srcObject = event.streams[0];
-        }
-        this.updateHook();
-      };
-
-      this.pc.onicecandidate = event => {
-        if (event.candidate && this.peerId) {
-          this.hub.sendIceCandidate(this.peerId, event.candidate.toJSON());
-        }
-      };
-
-      this.pc.onconnectionstatechange = () => {
-        const s = this.pc?.connectionState;
-        if (s === 'connected') {
-          if (this.callStatus() !== 'active') {
-            this.callStatus.set('active');
-            this.startDurationTimer();
-          }
-        } else if (s === 'failed' || s === 'closed') {
-          this.callStatus.set('ended');
-        }
-        this.updateHook();
-      };
-
-      this.updateHook();
-      // pc is now ready — resolve any signal that raced ahead of it.
-      if (this.isCaller) this.tryMakeOffer();
-      else if (this.pendingOffer) { const o = this.pendingOffer; this.pendingOffer = undefined; this.handleOffer(o); }
-    } catch {
-      // Media access denied / unavailable.
-      this.callStatus.set('ended');
-      this.updateHook();
-    }
-  }
-
-  /** Caller: send the offer once BOTH the peer has accepted and pc exists. */
-  private async tryMakeOffer(): Promise<void> {
-    if (!this.isCaller || !this.peerAccepted || !this.pc || this.offerMade) return;
-    this.offerMade = true;
-    const offer = await this.pc.createOffer();
-    await this.pc.setLocalDescription(offer);
-    this.hub.sendSdpOffer(this.peerId, offer);
-  }
-
-  /** Callee: apply the caller's offer and answer it. */
-  private async handleOffer(sdp: RTCSessionDescriptionInit): Promise<void> {
-    if (!this.pc) return;
-    await this.pc.setRemoteDescription(new RTCSessionDescription(sdp));
-    this.remoteSet = true;
-    await this.flushCandidates();
-    const answer = await this.pc.createAnswer();
-    await this.pc.setLocalDescription(answer);
-    this.hub.sendSdpAnswer(this.peerId, answer);
-  }
-
-  private async flushCandidates(): Promise<void> {
-    while (this.pendingCandidates.length && this.pc) {
-      await this.pc.addIceCandidate(new RTCIceCandidate(this.pendingCandidates.shift()!));
-    }
-  }
-
+  // ── Controls ──
   toggleMute(): void {
     const muted = !this.isMuted();
     this.localStream?.getAudioTracks().forEach(t => t.enabled = !muted);
@@ -204,62 +217,76 @@ export class VideoCallComponent implements OnInit, OnDestroy {
   }
 
   async toggleScreenShare(): Promise<void> {
-    if (!this.pc) return;
-    const sender = this.pc.getSenders().find(s => s.track?.kind === 'video');
-    if (!sender) return;
-
+    const senders = [...this.conns.values()].map(c => c.pc.getSenders().find(s => s.track?.kind === 'video')).filter(Boolean) as RTCRtpSender[];
     if (!this.isScreenSharing()) {
       try {
         const display = await (navigator.mediaDevices as any).getDisplayMedia({ video: true });
         const screenTrack: MediaStreamTrack = display.getVideoTracks()[0];
-        await sender.replaceTrack(screenTrack);
+        await Promise.all(senders.map(s => s.replaceTrack(screenTrack)));
         screenTrack.onended = () => this.toggleScreenShare();
         this.isScreenSharing.set(true);
         this.hub.startScreenShare(this.callId);
-      } catch { /* user cancelled */ }
+      } catch { /* cancelled */ }
     } else {
-      if (this.cameraTrack) await sender.replaceTrack(this.cameraTrack);
+      if (this.cameraTrack) await Promise.all(senders.map(s => s.replaceTrack(this.cameraTrack!)));
       this.isScreenSharing.set(false);
       this.hub.stopScreenShare(this.callId);
     }
   }
 
-  endCall(): void {
-    this.hub.endCall(this.callId);
-    this.cleanup();
-    this.callStatus.set('ended');
-    this.updateHook();
-    setTimeout(() => this.router.navigate(['/messages']), 1500);
+  // ── Invite more people (group) ──
+  openInvite(): void {
+    this.showInvite.set(true);
+    if (this.friends().length === 0) {
+      this.friendSvc.getFriends().subscribe({
+        next: res => {
+          if (!res.success) return;
+          // Backend FriendDto carries the friend's data under `friendInfo`.
+          this.friends.set(res.data.items.map((f: any) => ({
+            userId: f.friendInfo?.id ?? f.userId,
+            fullName: f.friendInfo?.fullName ?? f.fullName ?? 'Friend',
+            profilePictureUrl: f.friendInfo?.profilePictureUrl
+          })));
+        }
+      });
+    }
   }
 
-  private remoteHangup(): void {
+  invite(userId: string): void {
+    this.hub.inviteToCall(this.callId, userId, this.isVideoCall() ? 'video' : 'audio');
+    this.showInvite.set(false);
+  }
+
+  endCall(): void {
+    this.hub.leaveCall(this.callId);
+    this.endLocally();
+  }
+
+  private endLocally(): void {
     this.cleanup();
     this.callStatus.set('ended');
     this.updateHook();
-    setTimeout(() => this.router.navigate(['/messages']), 1500);
+    setTimeout(() => this.router.navigate(['/messages']), 1200);
   }
 
   private cleanup(): void {
     clearInterval(this.durationTimer);
+    this.conns.forEach(c => c.pc.close());
+    this.conns.clear();
     this.localStream?.getTracks().forEach(t => t.stop());
-    this.pc?.close();
     this.callSvc.clearContext(this.callId);
   }
 
-  private startDurationTimer(): void {
-    this.durationTimer = setInterval(() => this.duration.update(d => d + 1), 1000);
-  }
-
-  /** Test/diagnostic hook so e2e tests can observe call state from the page. */
   private updateHook(): void {
     (window as any).__videoCall = {
       callId: this.callId,
-      role: this.isCaller ? 'caller' : 'callee',
+      isGroup: this.isGroup(),
       video: this.isVideoCall(),
       status: this.callStatus(),
-      pcState: this.pc?.connectionState ?? 'none',
-      iceState: this.pc?.iceConnectionState ?? 'none',
-      hasRemote: !!(this.remoteVideoRef?.nativeElement?.srcObject)
+      peers: [...this.conns.entries()].map(([userId, c]) => ({
+        userId, pcState: c.pc.connectionState, iceState: c.pc.iceConnectionState
+      })),
+      connectedCount: [...this.conns.values()].filter(c => c.pc.connectionState === 'connected').length
     };
   }
 
@@ -272,6 +299,7 @@ export class VideoCallComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subs.forEach(s => s.unsubscribe());
+    this.hub.leaveCall(this.callId);
     this.cleanup();
   }
 }

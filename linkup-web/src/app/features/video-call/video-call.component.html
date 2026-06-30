@@ -1,88 +1,101 @@
-<div class="relative bg-black h-screen flex items-center justify-center">
-  <!-- Remote video (full screen) -->
-  <video #remoteVideo autoplay playsinline class="w-full h-full object-cover"
-    [class.hidden]="!isVideoCall()"></video>
+<div class="relative bg-black h-screen flex items-center justify-center overflow-hidden">
 
-  <!-- Audio-call backdrop: avatar + name -->
-  @if (!isVideoCall()) {
-    <div class="absolute inset-0 flex flex-col items-center justify-center text-white bg-gradient-to-b from-gray-800 to-black">
-      <div class="w-28 h-28 rounded-full bg-[#1877f2] flex items-center justify-center mb-4">
-        <mat-icon style="font-size:56px;height:56px;width:56px">person</mat-icon>
+  <!-- Remote participant tiles -->
+  @if (remoteTiles().length > 0) {
+    <div class="w-full h-full grid gap-1 p-1"
+      [style.grid-template-columns]="remoteTiles().length === 1 ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))'">
+      @for (tile of remoteTiles(); track tile.userId) {
+        <div class="relative bg-gray-900 rounded-lg overflow-hidden flex items-center justify-center">
+          @if (isVideoCall()) {
+            <video [appSrcObject]="tile.stream" autoplay playsinline class="w-full h-full object-cover"></video>
+          }
+          @if (!isVideoCall() || !tile.stream) {
+            <!-- hidden audio sink so remote audio plays even without video -->
+            <video [appSrcObject]="tile.stream" autoplay playsinline class="hidden"></video>
+            <div class="w-20 h-20 rounded-full bg-[#1877f2] flex items-center justify-center">
+              <mat-icon style="font-size:44px;height:44px;width:44px" class="text-white">person</mat-icon>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  } @else {
+    <!-- Waiting for others -->
+    <div class="flex flex-col items-center justify-center text-white">
+      <div class="w-24 h-24 rounded-full bg-[#1877f2] flex items-center justify-center mb-4 animate-pulse">
+        <mat-icon style="font-size:48px;height:48px;width:48px">{{ isVideoCall() ? 'videocam' : 'call' }}</mat-icon>
       </div>
-      <p class="text-2xl font-semibold">{{ peerName() || 'Voice call' }}</p>
-      <p class="text-sm text-gray-300 mt-1">Voice call</p>
+      <p class="text-lg">{{ callStatus() === 'ended' ? 'Call ended' : 'Calling…' }}</p>
     </div>
   }
 
   <!-- Local video (PiP) -->
   <video #localVideo autoplay playsinline muted
-    class="absolute top-4 right-4 w-36 h-24 object-cover rounded-xl border-2 border-white shadow-lg"
+    class="absolute top-4 right-4 w-36 h-24 object-cover rounded-xl border-2 border-white shadow-lg z-20"
     [class.hidden]="isCameraOff() || !isVideoCall()"></video>
 
-  <!-- Status overlay -->
-  @if (callStatus() === 'connecting') {
-    <div class="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white">
-      <div class="animate-pulse">
-        <mat-icon style="font-size:64px;height:64px;width:64px">videocam</mat-icon>
-      </div>
-      <p class="mt-4 text-xl">Connecting...</p>
+  <!-- Status badges -->
+  @if (callStatus() === 'active') {
+    <div class="absolute top-4 left-1/2 -translate-x-1/2 text-white text-sm bg-black/40 px-4 py-1 rounded-full z-20">
+      {{ formattedDuration }}@if (isGroup()) { · {{ remoteTiles().length + 1 }} in call }
     </div>
   }
-
   @if (callStatus() === 'ended') {
-    <div class="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-white">
+    <div class="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-white z-30">
       <mat-icon style="font-size:64px;height:64px;width:64px">call_end</mat-icon>
       <p class="mt-4 text-xl">Call ended</p>
     </div>
   }
 
-  <!-- Duration -->
-  @if (callStatus() === 'active') {
-    <div class="absolute top-4 left-1/2 -translate-x-1/2 text-white text-sm bg-black/40 px-4 py-1 rounded-full">
-      {{ formattedDuration }}
+  <!-- Invite panel -->
+  @if (showInvite()) {
+    <div class="absolute right-4 bottom-28 w-72 max-h-80 overflow-y-auto bg-white rounded-xl shadow-2xl z-30 p-3" data-testid="invite-panel">
+      <div class="flex items-center justify-between mb-2">
+        <p class="font-semibold text-gray-800">Add to call</p>
+        <button (click)="showInvite.set(false)" class="text-gray-400"><mat-icon>close</mat-icon></button>
+      </div>
+      @for (f of friends(); track f.userId) {
+        <button (click)="invite(f.userId)" [attr.data-testid]="'invite-' + f.userId"
+          class="w-full flex items-center gap-2 p-2 hover:bg-gray-50 rounded-lg text-left">
+          <img [src]="f.profilePictureUrl || 'assets/default-avatar.png'" class="w-8 h-8 rounded-full object-cover">
+          <span class="text-sm text-gray-800">{{ f.fullName }}</span>
+        </button>
+      }
+      @if (friends().length === 0) { <p class="text-sm text-gray-400 p-2">No friends to add</p> }
     </div>
   }
 
   <!-- Controls -->
   @if (callStatus() !== 'ended') {
-    <div class="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4">
-      <!-- Mute -->
+    <div class="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 z-20">
       <button (click)="toggleMute()"
         class="w-14 h-14 rounded-full flex items-center justify-center transition-colors"
-        [class.bg-white]="!isMuted()"
-        [class.bg-red-500]="isMuted()">
-        <mat-icon [class.text-gray-800]="!isMuted()" [class.text-white]="isMuted()">
-          {{ isMuted() ? 'mic_off' : 'mic' }}
-        </mat-icon>
+        [class.bg-white]="!isMuted()" [class.bg-red-500]="isMuted()">
+        <mat-icon [class.text-gray-800]="!isMuted()" [class.text-white]="isMuted()">{{ isMuted() ? 'mic_off' : 'mic' }}</mat-icon>
       </button>
 
-      <!-- End call -->
-      <button (click)="endCall()"
+      <button (click)="endCall()" data-testid="end-call"
         class="w-16 h-16 rounded-full bg-red-500 flex items-center justify-center hover:bg-red-600 transition-colors">
         <mat-icon class="text-white text-2xl">call_end</mat-icon>
       </button>
 
-      <!-- Camera (video calls only) -->
       @if (isVideoCall()) {
         <button (click)="toggleCamera()"
           class="w-14 h-14 rounded-full flex items-center justify-center transition-colors"
-          [class.bg-white]="!isCameraOff()"
-          [class.bg-red-500]="isCameraOff()">
-          <mat-icon [class.text-gray-800]="!isCameraOff()" [class.text-white]="isCameraOff()">
-            {{ isCameraOff() ? 'videocam_off' : 'videocam' }}
-          </mat-icon>
+          [class.bg-white]="!isCameraOff()" [class.bg-red-500]="isCameraOff()">
+          <mat-icon [class.text-gray-800]="!isCameraOff()" [class.text-white]="isCameraOff()">{{ isCameraOff() ? 'videocam_off' : 'videocam' }}</mat-icon>
         </button>
-
-        <!-- Screen share -->
         <button (click)="toggleScreenShare()"
           class="w-14 h-14 rounded-full flex items-center justify-center transition-colors"
-          [class.bg-white]="!isScreenSharing()"
-          [class.bg-[#1877f2]]="isScreenSharing()">
-          <mat-icon [class.text-gray-800]="!isScreenSharing()" [class.text-white]="isScreenSharing()">
-            {{ isScreenSharing() ? 'stop_screen_share' : 'screen_share' }}
-          </mat-icon>
+          [class.bg-white]="!isScreenSharing()" [class.bg-[#1877f2]]="isScreenSharing()">
+          <mat-icon [class.text-gray-800]="!isScreenSharing()" [class.text-white]="isScreenSharing()">{{ isScreenSharing() ? 'stop_screen_share' : 'screen_share' }}</mat-icon>
         </button>
       }
+
+      <button (click)="openInvite()" data-testid="add-person" title="Add person"
+        class="w-14 h-14 rounded-full bg-white flex items-center justify-center">
+        <mat-icon class="text-gray-800">person_add</mat-icon>
+      </button>
     </div>
   }
 </div>
