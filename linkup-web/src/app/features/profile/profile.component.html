@@ -12,6 +12,13 @@
         <div class="w-full h-full bg-gradient-to-br from-blue-400 to-blue-600"></div>
       }
 
+      @if (isOwnProfile) {
+        <label class="absolute top-3 right-3 bg-white/90 rounded-lg px-3 py-1.5 cursor-pointer shadow hover:bg-white flex items-center gap-1 text-sm font-medium text-gray-700">
+          <mat-icon style="font-size:18px;height:18px;width:18px">photo_camera</mat-icon> Edit cover
+          <input type="file" accept="image/*" class="hidden" (change)="uploadCoverPhoto($event)">
+        </label>
+      }
+
       <!-- Profile picture -->
       <div class="absolute -bottom-16 left-8">
         <div class="relative">
@@ -39,8 +46,12 @@
         <!-- Action buttons -->
         <div class="flex gap-2 mb-1">
           @if (isOwnProfile) {
-            <button mat-stroked-button>
+            <button mat-stroked-button (click)="openEditProfile()">
               <mat-icon>edit</mat-icon> Edit profile
+            </button>
+          } @else if (p.friendshipStatus === 'Blocked') {
+            <button mat-stroked-button (click)="unblockUser()">
+              <mat-icon>block</mat-icon> Unblock
             </button>
           } @else {
             @switch (p.friendshipStatus) {
@@ -71,6 +82,14 @@
             <button mat-stroked-button color="primary" (click)="startVideoCall()" data-testid="start-video-call">
               <mat-icon>videocam</mat-icon> Video call
             </button>
+            <button mat-icon-button [matMenuTriggerFor]="profileMenu" title="More">
+              <mat-icon>more_horiz</mat-icon>
+            </button>
+            <mat-menu #profileMenu="matMenu">
+              <button mat-menu-item (click)="blockUser()">
+                <mat-icon>block</mat-icon> Block user
+              </button>
+            </mat-menu>
           }
         </div>
       </div>
@@ -85,7 +104,7 @@
               <app-create-post (postCreated)="onPostCreated($event)"></app-create-post>
             }
             @for (post of posts(); track post.id) {
-              <app-post-card [post]="post" (postDeleted)="onPostDeleted($event)"></app-post-card>
+              <app-post-card [post]="post" (postDeleted)="onPostDeleted($event)" (postShared)="onPostCreated($event)"></app-post-card>
             }
           </div>
         </mat-tab>
@@ -110,6 +129,17 @@
                 <div class="flex items-center gap-2">
                   <mat-icon class="text-gray-400">link</mat-icon>
                   <a [href]="p.website" target="_blank" class="text-[#1877f2]">{{ p.website }}</a>
+                </div>
+              }
+              @if (p.gender) {
+                <div class="flex items-center gap-2">
+                  <mat-icon class="text-gray-400">person</mat-icon> {{ p.gender }}
+                </div>
+              }
+              @for (link of p.socialLinks; track link.id) {
+                <div class="flex items-center gap-2">
+                  <mat-icon class="text-gray-400">public</mat-icon>
+                  <a [href]="link.url" target="_blank" class="text-[#1877f2]">{{ link.platform }}</a>
                 </div>
               }
             </div>

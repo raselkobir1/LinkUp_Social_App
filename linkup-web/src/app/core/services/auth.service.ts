@@ -62,6 +62,12 @@ export class AuthService {
     return this.http.post<ApiResponse<object>>(`${environment.apiUrl}/auth/change-password`, dto);
   }
 
+  verifyEmail(userId: string, token: string): Observable<ApiResponse<object>> {
+    return this.http.get<ApiResponse<object>>(`${environment.apiUrl}/auth/verify-email`, {
+      params: { userId, token }
+    });
+  }
+
   getAccessToken(): string | null {
     return localStorage.getItem(ACCESS_TOKEN_KEY);
   }

@@ -16,7 +16,8 @@
       [post]="post"
       class="mb-4 block"
       (postDeleted)="onPostDeleted($event)"
-      (postUpdated)="onPostUpdated($event)">
+      (postUpdated)="onPostUpdated($event)"
+      (postShared)="onPostCreated($event)">
     </app-post-card>
   }
 

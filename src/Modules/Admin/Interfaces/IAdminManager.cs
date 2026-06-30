@@ -13,4 +13,6 @@ public interface IAdminManager
     Task DeleteUserAsync(Guid userId, CancellationToken ct = default);
     Task<PagedResult<AdminPostDto>> GetAllPostsAsync(PagedRequest request, CancellationToken ct = default);
     Task AdminDeletePostAsync(Guid postId, CancellationToken ct = default);
+    Task<PagedResult<AdminReportDto>> GetReportsAsync(PagedRequest request, bool includeResolved, CancellationToken ct = default);
+    Task ResolveReportAsync(Guid reportId, CancellationToken ct = default);
 }

@@ -11,9 +11,10 @@ export class ChatHubService implements OnDestroy {
 
   readonly message$ = new Subject<MessageDto>();
   readonly messageEdited$ = new Subject<MessageDto>();
-  readonly messageDeleted$ = new Subject<{ messageId: string; chatId: string }>();
+  readonly messageDeleted$ = new Subject<{ messageId: string }>();
   readonly messageRead$ = new Subject<{ messageId: string; userId: string }>();
-  readonly userTyping$ = new Subject<{ chatId: string; userId: string; userName: string; isTyping: boolean }>();
+  readonly messageDelivered$ = new Subject<{ messageId: string; userId: string }>();
+  readonly userTyping$ = new Subject<{ chatId: string; userId: string; isTyping: boolean }>();
   readonly userOnline$ = new Subject<{ userId: string; isOnline: boolean }>();
   readonly connected$ = new BehaviorSubject(false);
 
@@ -27,11 +28,13 @@ export class ChatHubService implements OnDestroy {
       .configureLogging(LogLevel.Warning)
       .build();
 
+    // NOTE: the server sends positional args (see ChatHub.cs / ChatManager.cs), not single objects.
     this.hub.on('ReceiveMessage', (msg: MessageDto) => this.message$.next(msg));
     this.hub.on('MessageEdited', (msg: MessageDto) => this.messageEdited$.next(msg));
-    this.hub.on('MessageDeleted', (data: { messageId: string; chatId: string }) => this.messageDeleted$.next(data));
-    this.hub.on('MessageRead', (data: { messageId: string; userId: string }) => this.messageRead$.next(data));
-    this.hub.on('UserTyping', (data: { chatId: string; userId: string; userName: string; isTyping: boolean }) => this.userTyping$.next(data));
+    this.hub.on('MessageDeleted', (messageId: string) => this.messageDeleted$.next({ messageId }));
+    this.hub.on('MessageRead', (messageId: string, userId: string) => this.messageRead$.next({ messageId, userId }));
+    this.hub.on('MessageDelivered', (messageId: string, userId: string) => this.messageDelivered$.next({ messageId, userId }));
+    this.hub.on('UserTyping', (chatId: string, userId: string, isTyping: boolean) => this.userTyping$.next({ chatId, userId, isTyping }));
     this.hub.on('UserOnline', (userId: string) => this.userOnline$.next({ userId, isOnline: true }));
     this.hub.on('UserOffline', (userId: string) => this.userOnline$.next({ userId, isOnline: false }));
 
@@ -45,7 +48,8 @@ export class ChatHubService implements OnDestroy {
   joinChat(chatId: string): void { this.hub?.invoke('JoinChat', chatId); }
   leaveChat(chatId: string): void { this.hub?.invoke('LeaveChat', chatId); }
   sendTyping(chatId: string, isTyping: boolean): void { this.hub?.invoke('SendTypingIndicator', chatId, isTyping); }
-  markAsRead(messageId: string): void { this.hub?.invoke('MarkAsRead', messageId); }
+  markAsRead(messageId: string, chatId: string): void { this.hub?.invoke('MarkAsRead', messageId, chatId); }
+  markDelivered(messageId: string, chatId: string): void { this.hub?.invoke('MarkDelivered', messageId, chatId); }
 
   async disconnect(): Promise<void> {
     await this.hub?.stop();

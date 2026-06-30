@@ -22,16 +22,16 @@ export class ProfileService {
     return this.http.put<ApiResponse<UserProfileDto>>(this.base, dto);
   }
 
-  uploadProfilePicture(file: File): Observable<ApiResponse<{ url: string }>> {
+  uploadProfilePicture(file: File): Observable<ApiResponse<UserProfileDto>> {
     const form = new FormData();
     form.append('file', file);
-    return this.http.post<ApiResponse<{ url: string }>>(`${this.base}/me/profile-picture`, form);
+    return this.http.post<ApiResponse<UserProfileDto>>(`${this.base}/picture`, form);
   }
 
-  uploadCoverPhoto(file: File): Observable<ApiResponse<{ url: string }>> {
+  uploadCoverPhoto(file: File): Observable<ApiResponse<UserProfileDto>> {
     const form = new FormData();
     form.append('file', file);
-    return this.http.post<ApiResponse<{ url: string }>>(`${this.base}/me/cover-photo`, form);
+    return this.http.post<ApiResponse<UserProfileDto>>(`${this.base}/cover`, form);
   }
 
   addEducation(dto: EducationDto): Observable<ApiResponse<EducationDto>> {
@@ -58,8 +58,16 @@ export class ProfileService {
     return this.http.delete<ApiResponse<object>>(`${this.base}/experience/${id}`);
   }
 
-  setSocialLinks(links: SocialLinkDto[]): Observable<ApiResponse<SocialLinkDto[]>> {
-    return this.http.put<ApiResponse<SocialLinkDto[]>>(`${this.base}/social-links`, links);
+  getSocialLinks(userId: string): Observable<ApiResponse<SocialLinkDto[]>> {
+    return this.http.get<ApiResponse<SocialLinkDto[]>>(`${this.base}/${userId}/social-links`);
+  }
+
+  addSocialLink(dto: SocialLinkDto): Observable<ApiResponse<SocialLinkDto>> {
+    return this.http.post<ApiResponse<SocialLinkDto>>(`${this.base}/social-links`, dto);
+  }
+
+  deleteSocialLink(id: string): Observable<ApiResponse<object>> {
+    return this.http.delete<ApiResponse<object>>(`${this.base}/social-links/${id}`);
   }
 
   getPrivacySettings(): Observable<ApiResponse<PrivacySettingsDto>> {

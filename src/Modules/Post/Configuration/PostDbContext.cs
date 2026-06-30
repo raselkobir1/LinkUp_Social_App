@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PostEntity = LinkUp.Modules.Post.Entities.Post;
 using PostImageEntity = LinkUp.Modules.Post.Entities.PostImage;
 using PostVideoEntity = LinkUp.Modules.Post.Entities.PostVideo;
+using PostReportEntity = LinkUp.Modules.Post.Entities.PostReport;
 
 namespace LinkUp.Modules.Post.Configuration;
 
@@ -10,6 +11,7 @@ public class PostDbContext(DbContextOptions<PostDbContext> options) : DbContext(
     public DbSet<PostEntity> Posts => Set<PostEntity>();
     public DbSet<PostImageEntity> PostImages => Set<PostImageEntity>();
     public DbSet<PostVideoEntity> PostVideos => Set<PostVideoEntity>();
+    public DbSet<PostReportEntity> Reports => Set<PostReportEntity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -74,6 +76,23 @@ public class PostDbContext(DbContextOptions<PostDbContext> options) : DbContext(
             e.Property(x => x.ThumbnailUrl).HasMaxLength(1000);
 
             e.HasIndex(x => x.PostId).IsUnique();
+        });
+
+        builder.Entity<PostReportEntity>(e =>
+        {
+            e.ToTable("post_reports");
+            e.HasKey(x => x.Id);
+
+            e.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
+            e.Property(x => x.IsResolved).HasDefaultValue(false);
+
+            e.HasOne(x => x.Post)
+                .WithMany()
+                .HasForeignKey(x => x.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => x.PostId);
+            e.HasIndex(x => x.IsResolved);
         });
     }
 }

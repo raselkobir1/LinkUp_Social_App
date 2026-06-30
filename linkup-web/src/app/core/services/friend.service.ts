@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, PagedResult } from '../models/api-response.model';
-import { FriendDto, FriendRequestDto, MutualFriendDto } from '../models/friend.model';
+import { FriendDto, FriendRequestDto, MutualFriendDto, BlockedUserDto } from '../models/friend.model';
 
 @Injectable({ providedIn: 'root' })
 export class FriendService {
@@ -55,5 +55,17 @@ export class FriendService {
 
   getSuggestions(): Observable<ApiResponse<FriendDto[]>> {
     return this.http.get<ApiResponse<FriendDto[]>>(`${this.base}/suggestions`);
+  }
+
+  blockUser(userId: string): Observable<ApiResponse<object>> {
+    return this.http.post<ApiResponse<object>>(`${this.base}/block/${userId}`, {});
+  }
+
+  unblockUser(userId: string): Observable<ApiResponse<object>> {
+    return this.http.delete<ApiResponse<object>>(`${this.base}/block/${userId}`);
+  }
+
+  getBlocked(): Observable<ApiResponse<BlockedUserDto[]>> {
+    return this.http.get<ApiResponse<BlockedUserDto[]>>(`${this.base}/blocked`);
   }
 }

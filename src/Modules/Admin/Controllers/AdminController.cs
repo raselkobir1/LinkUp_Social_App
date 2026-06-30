@@ -69,4 +69,20 @@ public class AdminController(IAdminManager adminManager) : BaseApiController
         await adminManager.AdminDeletePostAsync(postId, ct);
         return ApiOk<object>(null!, "Post deleted.");
     }
+
+    [HttpGet("reports")]
+    public async Task<IActionResult> GetReports([FromQuery] int page = 1, [FromQuery] int pageSize = 20,
+        [FromQuery] bool includeResolved = false, CancellationToken ct = default)
+    {
+        var request = new PagedRequest { PageNumber = page, PageSize = pageSize };
+        var result = await adminManager.GetReportsAsync(request, includeResolved, ct);
+        return ApiOk(result);
+    }
+
+    [HttpPut("reports/{reportId:guid}/resolve")]
+    public async Task<IActionResult> ResolveReport(Guid reportId, CancellationToken ct)
+    {
+        await adminManager.ResolveReportAsync(reportId, ct);
+        return ApiOk<object>(null!, "Report resolved.");
+    }
 }

@@ -1,8 +1,11 @@
 <div class="flex h-[calc(100vh-56px)] bg-white">
   <!-- Chat list sidebar -->
   <div class="w-80 border-r border-gray-200 flex flex-col flex-shrink-0">
-    <div class="p-4 border-b border-gray-100">
+    <div class="p-4 border-b border-gray-100 flex items-center justify-between">
       <h2 class="text-xl font-bold text-gray-800">Messages</h2>
+      <button mat-icon-button class="text-[#1877f2]" title="New group" (click)="openCreateGroup()">
+        <mat-icon>group_add</mat-icon>
+      </button>
     </div>
 
     <div class="flex-1 overflow-y-auto">
@@ -47,22 +50,52 @@
     <div class="flex-1 flex flex-col">
       <!-- Header -->
       <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-200 bg-white">
-        <img [src]="chat.otherUserProfilePicture || 'assets/default-avatar.png'" class="w-10 h-10 rounded-full object-cover">
-        <div>
+        <img [src]="(chat.isGroup ? chat.groupPhotoUrl : chat.otherUserProfilePicture) || 'assets/default-avatar.png'"
+          class="w-10 h-10 rounded-full object-cover" [class.cursor-pointer]="chat.isGroup" (click)="chat.isGroup && openGroupInfo()">
+        <div [class.cursor-pointer]="chat.isGroup" (click)="chat.isGroup && openGroupInfo()">
           <p class="font-semibold text-gray-800">{{ chat.isGroup ? chat.groupName : chat.otherUserName }}</p>
-          @if (chat.otherUserIsOnline) {
+          @if (chat.isGroup) {
+            <p class="text-xs text-gray-400">Tap for group info</p>
+          } @else if (chat.otherUserIsOnline) {
             <p class="text-xs text-green-500">Active now</p>
           }
         </div>
         <div class="ml-auto flex gap-1">
-          <button mat-icon-button class="text-[#1877f2]" title="Video call">
-            <mat-icon>videocam</mat-icon>
+          @if (chat.isGroup) {
+            <button mat-icon-button class="text-gray-500" title="Group info" (click)="openGroupInfo()">
+              <mat-icon>info</mat-icon>
+            </button>
+          }
+          <button mat-icon-button class="text-gray-500" title="Search messages" (click)="toggleSearch()">
+            <mat-icon>search</mat-icon>
           </button>
-          <button mat-icon-button class="text-[#1877f2]" title="Voice call">
-            <mat-icon>call</mat-icon>
-          </button>
+          @if (!chat.isGroup) {
+            <button mat-icon-button class="text-[#1877f2]" title="Video call" (click)="startVideoCall()">
+              <mat-icon>videocam</mat-icon>
+            </button>
+          }
         </div>
       </div>
+
+      <!-- Search panel -->
+      @if (showSearch()) {
+        <div class="px-4 py-2 border-b border-gray-100 bg-gray-50">
+          <input type="text" [(ngModel)]="searchQuery" (input)="runSearch()" placeholder="Search in conversation..."
+            class="w-full bg-white border border-gray-200 rounded-full px-4 py-1.5 text-sm outline-none">
+          @if (searchResults().length > 0) {
+            <div class="mt-2 max-h-40 overflow-y-auto space-y-1">
+              @for (r of searchResults(); track r.id) {
+                <div class="text-sm bg-white rounded-lg px-3 py-1.5 border border-gray-100">
+                  <span class="font-medium text-gray-700">{{ r.senderName }}:</span> {{ r.content }}
+                  <span class="text-xs text-gray-400 ml-1">{{ timeAgo(r.createdAt) }}</span>
+                </div>
+              }
+            </div>
+          } @else if (searchQuery.trim()) {
+            <p class="text-xs text-gray-400 mt-2">No matches</p>
+          }
+        </div>
+      }
 
       <!-- Messages -->
       <div #messagesContainer class="flex-1 overflow-y-auto p-4 space-y-2">
@@ -71,31 +104,88 @@
         }
 
         @for (msg of messages(); track msg.id) {
-          <div class="flex" [class.justify-end]="msg.senderId === auth.currentUser()?.id">
-            @if (msg.senderId !== auth.currentUser()?.id) {
+          <div class="flex group items-end" [class.justify-end]="isMine(msg)">
+            @if (!isMine(msg)) {
               <img [src]="msg.senderProfilePicture || 'assets/default-avatar.png'" class="w-7 h-7 rounded-full mr-2 flex-shrink-0 self-end">
             }
-            <div class="max-w-[65%]">
-              <div class="px-3 py-2 rounded-2xl text-sm"
-                [class.bg-[#1877f2]]="msg.senderId === auth.currentUser()?.id"
-                [class.text-white]="msg.senderId === auth.currentUser()?.id"
-                [class.bg-gray-100]="msg.senderId !== auth.currentUser()?.id"
-                [class.text-gray-800]="msg.senderId !== auth.currentUser()?.id">
-                @if (msg.isDeletedForEveryone) {
-                  <em class="text-gray-400">Message deleted</em>
-                } @else {
-                  {{ msg.content }}
+
+            <!-- Actions menu (own messages: edit/delete; others: reply) -->
+            @if (!msg.isDeletedForEveryone && isMine(msg)) {
+              <button mat-icon-button class="opacity-0 group-hover:opacity-100 text-gray-400 self-center" [matMenuTriggerFor]="msgMenu">
+                <mat-icon style="font-size:18px;height:18px;width:18px">more_horiz</mat-icon>
+              </button>
+              <mat-menu #msgMenu="matMenu">
+                <button mat-menu-item (click)="setReply(msg)"><mat-icon>reply</mat-icon> Reply</button>
+                @if (msg.messageType === 'Text') {
+                  <button mat-menu-item (click)="startEdit(msg)"><mat-icon>edit</mat-icon> Edit</button>
                 }
-              </div>
-              <p class="text-xs text-gray-400 mt-0.5" [class.text-right]="msg.senderId === auth.currentUser()?.id">
-                {{ timeAgo(msg.createdAt) }}
-                @if (msg.senderId === auth.currentUser()?.id) {
-                  <mat-icon style="font-size:12px;height:12px;width:12px" class="ml-1">
-                    {{ msg.status === 'Read' ? 'done_all' : msg.status === 'Delivered' ? 'done_all' : 'done' }}
+                <button mat-menu-item (click)="deleteForMe(msg)"><mat-icon>visibility_off</mat-icon> Delete for me</button>
+                <button mat-menu-item (click)="deleteForEveryone(msg)"><mat-icon>delete</mat-icon> Delete for everyone</button>
+              </mat-menu>
+            }
+
+            <div class="max-w-[65%]">
+              @if (chat.isGroup && !isMine(msg) && !msg.isDeletedForEveryone) {
+                <p class="text-xs text-gray-500 ml-1 mb-0.5">{{ msg.senderName }}</p>
+              }
+              @if (editingMessageId() === msg.id) {
+                <div class="flex items-center gap-2">
+                  <input [(ngModel)]="editContent" class="flex-1 bg-gray-100 rounded-full px-3 py-1.5 text-sm outline-none" (keyup.enter)="saveEdit(msg)">
+                  <button (click)="saveEdit(msg)" class="text-[#1877f2] text-xs font-medium">Save</button>
+                  <button (click)="cancelEdit()" class="text-gray-400 text-xs">Cancel</button>
+                </div>
+              } @else {
+                <div class="px-3 py-2 rounded-2xl text-sm"
+                  [class.bg-[#1877f2]]="isMine(msg)"
+                  [class.text-white]="isMine(msg)"
+                  [class.bg-gray-100]="!isMine(msg)"
+                  [class.text-gray-800]="!isMine(msg)">
+
+                  @if (msg.isDeletedForEveryone) {
+                    <em class="opacity-70">Message deleted</em>
+                  } @else {
+                    <!-- Reply quote -->
+                    @if (msg.replyToMessage) {
+                      <div class="text-xs opacity-80 border-l-2 pl-2 mb-1">
+                        <span class="font-medium">{{ msg.replyToMessage.senderName }}</span>: {{ msg.replyToMessage.content }}
+                      </div>
+                    }
+                    <!-- Attachment -->
+                    @if (msg.attachments?.length > 0) {
+                      @for (att of msg.attachments; track att.url) {
+                        @switch (msg.messageType) {
+                          @case ('Image') { <img [src]="att.url" class="rounded-lg max-h-60 mb-1"> }
+                          @case ('Video') { <video [src]="att.url" controls class="rounded-lg max-h-60 mb-1 bg-black"></video> }
+                          @case ('Voice') { <audio [src]="att.url" controls class="mb-1"></audio> }
+                          @default {
+                            <a [href]="att.url" target="_blank" class="flex items-center gap-1 underline">
+                              <mat-icon style="font-size:16px;height:16px;width:16px">attach_file</mat-icon> {{ msg.content || 'Attachment' }}
+                            </a>
+                          }
+                        }
+                      }
+                    } @else {
+                      {{ msg.content }}
+                    }
+                  }
+                </div>
+              }
+              <p class="text-xs text-gray-400 mt-0.5 flex items-center gap-1" [class.justify-end]="isMine(msg)">
+                <span>{{ timeAgo(msg.createdAt) }}</span>
+                @if (msg.editedAt && !msg.isDeletedForEveryone) { <span>· edited</span> }
+                @if (isMine(msg) && !msg.isDeletedForEveryone) {
+                  <mat-icon style="font-size:12px;height:12px;width:12px" [class.text-[#1877f2]]="msg.status === 'Read'">
+                    {{ msg.status === 'Sent' ? 'done' : 'done_all' }}
                   </mat-icon>
                 }
               </p>
             </div>
+
+            @if (!msg.isDeletedForEveryone && !isMine(msg)) {
+              <button mat-icon-button class="opacity-0 group-hover:opacity-100 text-gray-400 self-center" (click)="setReply(msg)" title="Reply">
+                <mat-icon style="font-size:18px;height:18px;width:18px">reply</mat-icon>
+              </button>
+            }
           </div>
         }
 
@@ -111,13 +201,55 @@
         }
       </div>
 
+      <!-- Reply preview -->
+      @if (replyTo(); as r) {
+        <div class="px-4 pt-2 flex items-center gap-2 text-sm text-gray-600 bg-gray-50 border-t border-gray-100">
+          <mat-icon style="font-size:18px;height:18px;width:18px" class="text-gray-400">reply</mat-icon>
+          <div class="flex-1 truncate">Replying to <span class="font-medium">{{ r.senderName }}</span>: {{ r.content }}</div>
+          <button mat-icon-button (click)="clearReply()"><mat-icon style="font-size:18px;height:18px;width:18px">close</mat-icon></button>
+        </div>
+      }
+
+      <!-- Emoji picker -->
+      @if (showEmoji()) {
+        <div class="px-4 py-2 border-t border-gray-100 flex flex-wrap gap-1 bg-gray-50">
+          @for (e of emojis; track e) {
+            <button class="text-xl hover:scale-125 transition-transform" (click)="addEmoji(e)">{{ e }}</button>
+          }
+        </div>
+      }
+
       <!-- Input -->
-      <div class="px-4 py-3 border-t border-gray-200 flex items-center gap-2">
+      <div class="px-4 py-3 border-t border-gray-200 flex items-center gap-1">
+        <button mat-icon-button class="text-gray-500" title="Emoji" (click)="showEmoji.set(!showEmoji())">
+          <mat-icon>mood</mat-icon>
+        </button>
+        <label class="text-gray-500 cursor-pointer p-2 rounded-full hover:bg-gray-100" title="Photo">
+          <mat-icon>image</mat-icon>
+          <input type="file" accept="image/*" class="hidden" (change)="onAttachmentSelected($event, 'image')">
+        </label>
+        <label class="text-gray-500 cursor-pointer p-2 rounded-full hover:bg-gray-100" title="Video">
+          <mat-icon>videocam</mat-icon>
+          <input type="file" accept="video/*" class="hidden" (change)="onAttachmentSelected($event, 'video')">
+        </label>
+        <label class="text-gray-500 cursor-pointer p-2 rounded-full hover:bg-gray-100" title="File">
+          <mat-icon>attach_file</mat-icon>
+          <input type="file" class="hidden" (change)="onAttachmentSelected($event, 'file')">
+        </label>
+        <button mat-icon-button [class.text-red-500]="recording()" [class.text-gray-500]="!recording()"
+          title="Voice message" (click)="toggleRecording()">
+          <mat-icon>{{ recording() ? 'stop_circle' : 'mic' }}</mat-icon>
+        </button>
+
         <div class="flex-1 flex items-center gap-2 bg-gray-100 rounded-full px-4 py-2">
-          <input type="text" [(ngModel)]="newMessage" placeholder="Aa"
-            class="flex-1 bg-transparent outline-none text-sm"
-            (keyup.enter)="sendMessage()"
-            (input)="onTyping()">
+          @if (uploading()) {
+            <span class="text-xs text-gray-400">Uploading…</span>
+          } @else {
+            <input type="text" [(ngModel)]="newMessage" placeholder="Aa"
+              class="flex-1 bg-transparent outline-none text-sm"
+              (keyup.enter)="sendMessage()"
+              (input)="onTyping()">
+          }
         </div>
         <button mat-icon-button color="primary" (click)="sendMessage()" [disabled]="!newMessage.trim()">
           <mat-icon>send</mat-icon>

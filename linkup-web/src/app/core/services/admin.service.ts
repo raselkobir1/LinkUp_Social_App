@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, PagedResult } from '../models/api-response.model';
-import { DashboardStats, AdminUser, AdminPost } from '../models/admin.model';
+import { DashboardStats, AdminUser, AdminPost, AdminReport } from '../models/admin.model';
 
 @Injectable({ providedIn: 'root' })
 export class AdminService {
@@ -49,5 +49,15 @@ export class AdminService {
 
   deletePost(postId: string): Observable<ApiResponse<object>> {
     return this.http.delete<ApiResponse<object>>(`${this.base}/posts/${postId}`);
+  }
+
+  getReports(page = 1, pageSize = 20, includeResolved = false): Observable<ApiResponse<PagedResult<AdminReport>>> {
+    return this.http.get<ApiResponse<PagedResult<AdminReport>>>(`${this.base}/reports`, {
+      params: new HttpParams().set('page', page).set('pageSize', pageSize).set('includeResolved', includeResolved)
+    });
+  }
+
+  resolveReport(reportId: string): Observable<ApiResponse<object>> {
+    return this.http.put<ApiResponse<object>>(`${this.base}/reports/${reportId}/resolve`, {});
   }
 }

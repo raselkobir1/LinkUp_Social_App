@@ -26,6 +26,7 @@ public class AdminManager(
         var newUsersToday = await identityDbContext.Users.CountAsync(u => u.CreatedAt >= today, ct);
         var totalPosts = await postDbContext.Posts.CountAsync(p => !p.IsDeleted, ct);
         var newPostsToday = await postDbContext.Posts.CountAsync(p => !p.IsDeleted && p.CreatedAt >= today, ct);
+        var totalReports = await postDbContext.Reports.CountAsync(r => !r.IsResolved, ct);
 
         return new DashboardStatsDto
         {
@@ -33,7 +34,7 @@ public class AdminManager(
             ActiveUsers = activeUsers,
             SuspendedUsers = suspendedUsers,
             TotalPosts = totalPosts,
-            TotalReports = 0,
+            TotalReports = totalReports,
             NewUsersToday = newUsersToday,
             NewPostsToday = newPostsToday
         };
@@ -152,6 +153,58 @@ public class AdminManager(
 
         post.IsDeleted = true;
         post.DeletedAt = DateTime.UtcNow;
+        await postDbContext.SaveChangesAsync(ct);
+    }
+
+    public async Task<PagedResult<AdminReportDto>> GetReportsAsync(PagedRequest request, bool includeResolved, CancellationToken ct = default)
+    {
+        var query = postDbContext.Reports.AsQueryable();
+        if (!includeResolved) query = query.Where(r => !r.IsResolved);
+        query = query.OrderByDescending(r => r.CreatedAt);
+
+        var paged = await query.ToPagedResultAsync(request, ct);
+
+        var postIds = paged.Items.Select(r => r.PostId).Distinct().ToList();
+        var posts = await postDbContext.Posts
+            .Where(p => postIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, ct);
+
+        var userIds = paged.Items.Select(r => r.ReportedById)
+            .Concat(posts.Values.Select(p => p.AuthorId))
+            .Distinct().ToList();
+        var users = await identityDbContext.Users
+            .Where(u => userIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, ct);
+
+        var dtos = paged.Items.Select(r =>
+        {
+            posts.TryGetValue(r.PostId, out var post);
+            var authorId = post?.AuthorId ?? Guid.Empty;
+            return new AdminReportDto
+            {
+                Id = r.Id,
+                PostId = r.PostId,
+                PostContent = post?.Content,
+                PostAuthorId = authorId,
+                PostAuthorName = users.TryGetValue(authorId, out var a) ? a.FullName : "Unknown",
+                ReportedById = r.ReportedById,
+                ReportedByName = users.TryGetValue(r.ReportedById, out var rb) ? rb.FullName : "Unknown",
+                Reason = r.Reason,
+                IsResolved = r.IsResolved,
+                CreatedAt = r.CreatedAt
+            };
+        });
+
+        return PagedResult<AdminReportDto>.Create(dtos, paged.TotalCount, request.PageNumber, request.PageSize);
+    }
+
+    public async Task ResolveReportAsync(Guid reportId, CancellationToken ct = default)
+    {
+        var report = await postDbContext.Reports.FindAsync([reportId], ct)
+            ?? throw new NotFoundException("Report", reportId);
+
+        report.IsResolved = true;
+        report.UpdatedAt = DateTime.UtcNow;
         await postDbContext.SaveChangesAsync(ct);
     }
 

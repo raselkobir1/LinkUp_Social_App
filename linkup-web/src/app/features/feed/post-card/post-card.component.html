@@ -25,11 +25,23 @@
         <mat-icon>more_horiz</mat-icon>
       </button>
       <mat-menu #postMenu="matMenu">
+        <button mat-menu-item (click)="startEdit()">
+          <mat-icon>edit</mat-icon> Edit
+        </button>
         <button mat-menu-item (click)="pinPost()">
           <mat-icon>push_pin</mat-icon> {{ post.isPinned ? 'Unpin' : 'Pin' }}
         </button>
         <button mat-menu-item (click)="deletePost()" class="text-red-500">
           <mat-icon color="warn">delete</mat-icon> Delete
+        </button>
+      </mat-menu>
+    } @else {
+      <button mat-icon-button [matMenuTriggerFor]="otherPostMenu" class="text-gray-400">
+        <mat-icon>more_horiz</mat-icon>
+      </button>
+      <mat-menu #otherPostMenu="matMenu">
+        <button mat-menu-item (click)="reportPost()">
+          <mat-icon>flag</mat-icon> Report post
         </button>
       </mat-menu>
     }
@@ -43,7 +55,22 @@
   }
 
   <!-- Content -->
-  @if (post.content) {
+  @if (editing()) {
+    <div class="px-4 pb-3">
+      <textarea [(ngModel)]="editContent" rows="3"
+        class="w-full border border-gray-200 rounded-lg p-2 text-sm outline-none focus:border-[#1877f2]"></textarea>
+      <div class="flex items-center gap-2 mt-2">
+        <select [(ngModel)]="editVisibility" class="border border-gray-200 rounded-lg text-sm px-2 py-1">
+          <option value="Public">Public</option>
+          <option value="Friends">Friends</option>
+          <option value="OnlyMe">Only me</option>
+        </select>
+        <span class="flex-1"></span>
+        <button mat-button (click)="cancelEdit()">Cancel</button>
+        <button mat-flat-button color="primary" (click)="saveEdit()">Save</button>
+      </div>
+    </div>
+  } @else if (post.content) {
     <p class="px-4 pb-3 text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">{{ post.content }}</p>
   }
 
@@ -125,11 +152,27 @@
     </button>
 
     <!-- Share -->
-    <button class="flex-1 flex items-center justify-center gap-2 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg transition-colors">
+    <button (click)="toggleShareBox()"
+      class="flex-1 flex items-center justify-center gap-2 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+      [class.text-[#1877f2]]="showShareBox()">
       <mat-icon style="font-size:18px;height:18px;width:18px">share</mat-icon>
       <span>Share</span>
     </button>
   </div>
+
+  <!-- Share box -->
+  @if (showShareBox()) {
+    <div class="px-4 pb-4 border-t border-gray-100 pt-3">
+      <textarea [(ngModel)]="shareContent" rows="2" placeholder="Say something about this..."
+        class="w-full border border-gray-200 rounded-lg p-2 text-sm outline-none focus:border-[#1877f2]"></textarea>
+      <div class="flex justify-end gap-2 mt-2">
+        <button mat-button (click)="toggleShareBox()">Cancel</button>
+        <button mat-flat-button color="primary" (click)="sharePost()" [disabled]="sharing()">
+          {{ sharing() ? 'Sharing...' : 'Share now' }}
+        </button>
+      </div>
+    </div>
+  }
 
   <!-- Comments section -->
   @if (showComments()) {
@@ -155,16 +198,60 @@
       @for (comment of comments(); track comment.id) {
         <div class="flex gap-2 mb-3">
           <img [src]="comment.authorProfilePicture || 'assets/default-avatar.png'" class="w-8 h-8 rounded-full flex-shrink-0">
-          <div>
-            <div class="bg-gray-100 rounded-2xl px-3 py-2 inline-block">
-              <p class="text-xs font-semibold text-gray-800">{{ comment.authorName }}</p>
-              <p class="text-sm text-gray-700">{{ comment.content }}</p>
-            </div>
-            <div class="flex gap-3 px-1 mt-1 text-xs text-gray-400">
-              <span>{{ timeAgo(comment.createdAt) }}</span>
-              <button class="hover:text-[#1877f2]" [class.text-[#1877f2]]="comment.isLiked">Like {{ comment.likeCount > 0 ? comment.likeCount : '' }}</button>
-              <button class="hover:text-[#1877f2]">Reply</button>
-            </div>
+          <div class="flex-1">
+            @if (editingCommentId() === comment.id) {
+              <div class="flex items-center gap-2">
+                <input [(ngModel)]="editCommentContent" class="flex-1 bg-gray-100 rounded-full px-3 py-1.5 text-sm outline-none"
+                  (keyup.enter)="saveEditComment(comment)">
+                <button (click)="saveEditComment(comment)" class="text-[#1877f2] text-xs font-medium">Save</button>
+                <button (click)="cancelEditComment()" class="text-gray-400 text-xs">Cancel</button>
+              </div>
+            } @else {
+              <div class="bg-gray-100 rounded-2xl px-3 py-2 inline-block">
+                <p class="text-xs font-semibold text-gray-800">{{ comment.authorName }}</p>
+                <p class="text-sm text-gray-700">{{ comment.content }}</p>
+              </div>
+              <div class="flex gap-3 px-1 mt-1 text-xs text-gray-400 items-center">
+                <span>{{ timeAgo(comment.createdAt) }}</span>
+                <button class="hover:text-[#1877f2]" [class.text-[#1877f2]]="comment.isLiked" (click)="likeComment(comment)">Like {{ comment.likeCount > 0 ? comment.likeCount : '' }}</button>
+                <button class="hover:text-[#1877f2]" (click)="toggleReply(comment)">Reply {{ comment.replyCount > 0 ? comment.replyCount : '' }}</button>
+                @if (isCommentOwner(comment)) {
+                  <button class="hover:text-[#1877f2]" (click)="startEditComment(comment)">Edit</button>
+                  <button class="hover:text-red-500" (click)="deleteComment(comment)">Delete</button>
+                }
+              </div>
+            }
+
+            <!-- Replies -->
+            @for (reply of repliesByComment()[comment.id] ?? []; track reply.id) {
+              <div class="flex gap-2 mt-2 ml-2">
+                <img [src]="reply.authorProfilePicture || 'assets/default-avatar.png'" class="w-7 h-7 rounded-full flex-shrink-0">
+                <div>
+                  <div class="bg-gray-100 rounded-2xl px-3 py-1.5 inline-block">
+                    <p class="text-xs font-semibold text-gray-800">{{ reply.authorName }}</p>
+                    <p class="text-sm text-gray-700">{{ reply.content }}</p>
+                  </div>
+                  <div class="flex gap-3 px-1 mt-0.5 text-xs text-gray-400 items-center">
+                    <span>{{ timeAgo(reply.createdAt) }}</span>
+                    <button class="hover:text-[#1877f2]" [class.text-[#1877f2]]="reply.isLiked" (click)="likeComment(reply)">Like {{ reply.likeCount > 0 ? reply.likeCount : '' }}</button>
+                    @if (isCommentOwner(reply)) {
+                      <button class="hover:text-red-500" (click)="deleteComment(reply)">Delete</button>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
+
+            <!-- Reply input -->
+            @if (replyingToId() === comment.id) {
+              <div class="flex items-center gap-2 mt-2 ml-2 bg-gray-100 rounded-full px-3 py-1">
+                <input [(ngModel)]="replyContent" placeholder="Write a reply..." class="bg-transparent outline-none text-sm flex-1"
+                  (keyup.enter)="submitReply(comment)">
+                <button (click)="submitReply(comment)" class="text-gray-400 hover:text-[#1877f2]" [disabled]="!replyContent.trim()">
+                  <mat-icon style="font-size:16px;height:16px;width:16px">send</mat-icon>
+                </button>
+              </div>
+            }
           </div>
         </div>
       }

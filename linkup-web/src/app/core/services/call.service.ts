@@ -1,5 +1,10 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { environment } from '../../../environments/environment';
+import { ApiResponse, PagedResult } from '../models/api-response.model';
+import { CallHistoryItem } from '../models/call.model';
 import { VideoCallHubService } from '../signalr/video-call-hub.service';
 
 export interface IncomingCall {
@@ -19,6 +24,7 @@ export interface CallContext {
 export class CallService {
   private hub = inject(VideoCallHubService);
   private router = inject(Router);
+  private http = inject(HttpClient);
 
   /** Set while an incoming call is ringing (shown by the shell banner). */
   readonly incomingCall = signal<IncomingCall | null>(null);
@@ -69,5 +75,11 @@ export class CallService {
 
   clearContext(callId: string): void {
     this.contexts.delete(callId);
+  }
+
+  getCallHistory(page = 1, pageSize = 30): Observable<ApiResponse<PagedResult<CallHistoryItem>>> {
+    return this.http.get<ApiResponse<PagedResult<CallHistoryItem>>>(`${environment.apiUrl}/video-calls/history`, {
+      params: new HttpParams().set('page', page).set('pageSize', pageSize)
+    });
   }
 }
