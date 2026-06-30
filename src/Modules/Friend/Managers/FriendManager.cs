@@ -282,8 +282,16 @@ public class FriendManager(
             .Select(r => r.SenderId == userId ? r.ReceiverId : r.SenderId)
             .ToListAsync(ct);
 
-        var excludedIds = myFriendIds.Concat(pendingIds).Append(userId).Distinct().ToList();
+        var blockedIds = await db.BlockedUsers
+            .AsNoTracking()
+            .Where(b => b.BlockerId == userId || b.BlockedId == userId)
+            .Select(b => b.BlockerId == userId ? b.BlockedId : b.BlockerId)
+            .ToListAsync(ct);
 
+        // Use List<T> (not arrays) for EF .Contains() translation on .NET 10.
+        var excludedIds = myFriendIds.Concat(pendingIds).Concat(blockedIds).Append(userId).Distinct().ToList();
+
+        // 1) Friends-of-friends first, ranked by how many mutual friends they share.
         var grouped = await db.Friendships
             .AsNoTracking()
             .Where(f => myFriendIds.Contains(f.UserId) && !excludedIds.Contains(f.FriendId))
@@ -299,7 +307,7 @@ public class FriendManager(
             .Take(count)
             .ToListAsync(ct);
 
-        return grouped.Select(x => new FriendDto
+        var suggestions = grouped.Select(x => new FriendDto
         {
             UserId = x.FriendId,
             FriendInfo = new UserCardDto
@@ -310,6 +318,36 @@ public class FriendManager(
             },
             MutualFriendCount = x.MutualCount
         }).ToList();
+
+        // 2) Fill the rest with other people on the platform so new users (and users
+        //    with few mutuals) still get suggestions. Already-friends, pending,
+        //    blocked, suspended/inactive and self are excluded.
+        if (suggestions.Count < count)
+        {
+            var skipIds = excludedIds.Concat(suggestions.Select(s => s.UserId)).Distinct().ToList();
+
+            var others = await userManager.Users
+                .AsNoTracking()
+                .Where(u => !skipIds.Contains(u.Id) && u.IsActive && !u.IsSuspended)
+                .OrderByDescending(u => u.CreatedAt)
+                .Take(count - suggestions.Count)
+                .Select(u => new { u.Id, u.FirstName, u.LastName, u.ProfilePictureUrl })
+                .ToListAsync(ct);
+
+            suggestions.AddRange(others.Select(u => new FriendDto
+            {
+                UserId = u.Id,
+                FriendInfo = new UserCardDto
+                {
+                    Id = u.Id,
+                    FullName = $"{u.FirstName} {u.LastName}".Trim(),
+                    ProfilePictureUrl = u.ProfilePictureUrl
+                },
+                MutualFriendCount = 0
+            }));
+        }
+
+        return suggestions;
     }
 
     public async Task<bool> IsFriendAsync(Guid userId, Guid otherUserId, CancellationToken ct = default)

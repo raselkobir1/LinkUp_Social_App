@@ -53,8 +53,10 @@ export class FriendService {
     return this.http.get<ApiResponse<MutualFriendDto[]>>(`${this.base}/mutual/${userId}`);
   }
 
-  getSuggestions(): Observable<ApiResponse<FriendDto[]>> {
-    return this.http.get<ApiResponse<FriendDto[]>>(`${this.base}/suggestions`);
+  getSuggestions(count = 50): Observable<ApiResponse<FriendDto[]>> {
+    return this.http.get<ApiResponse<FriendDto[]>>(`${this.base}/suggestions`, {
+      params: new HttpParams().set('count', count)
+    });
   }
 
   blockUser(userId: string): Observable<ApiResponse<object>> {
