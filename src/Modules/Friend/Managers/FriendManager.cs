@@ -5,6 +5,8 @@ using LinkUp.Modules.Friend.DTOs;
 using LinkUp.Modules.Friend.Entities;
 using LinkUp.Modules.Friend.Interfaces;
 using LinkUp.Modules.Identity.Entities;
+using LinkUp.Modules.Notification.DTOs;
+using LinkUp.Modules.Notification.Interfaces;
 using LinkUp.SharedKernel.Enums;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -13,12 +15,16 @@ namespace LinkUp.Modules.Friend.Managers;
 
 public class FriendManager(
     FriendDbContext db,
-    UserManager<ApplicationUser> userManager) : IFriendManager
+    UserManager<ApplicationUser> userManager,
+    INotificationManager notificationManager) : IFriendManager
 {
     public async Task SendRequestAsync(Guid senderId, SendFriendRequestDto dto, CancellationToken ct = default)
     {
         if (senderId == dto.ReceiverId)
             throw new ValidationException("You cannot send a friend request to yourself.");
+
+        if (await IsBlockedAsync(senderId, dto.ReceiverId, ct))
+            throw new ForbiddenException("You cannot send a friend request to this user.");
 
         var already = await db.FriendRequests
             .AnyAsync(r =>
@@ -54,6 +60,10 @@ public class FriendManager(
 
         db.FriendRequests.Add(request);
         await db.SaveChangesAsync(ct);
+
+        await notificationManager.CreateNotificationAsync(new CreateNotificationDto(
+            dto.ReceiverId, senderId, NotificationType.FriendRequest,
+            request.Id, "FriendRequest", $"{sender.FullName} sent you a friend request"), ct);
     }
 
     public async Task AcceptRequestAsync(Guid requestId, Guid userId, CancellationToken ct = default)
@@ -89,6 +99,11 @@ public class FriendManager(
         });
 
         await db.SaveChangesAsync(ct);
+
+        // Notify the original requester that their request was accepted.
+        await notificationManager.CreateNotificationAsync(new CreateNotificationDto(
+            request.SenderId, request.ReceiverId, NotificationType.FriendRequestAccepted,
+            request.Id, "FriendRequest", $"{request.ReceiverName} accepted your friend request"), ct);
     }
 
     public async Task RejectRequestAsync(Guid requestId, Guid userId, CancellationToken ct = default)
@@ -310,4 +325,67 @@ public class FriendManager(
         SentAt = r.CreatedAt,
         RespondedAt = r.RespondedAt
     };
+
+    public async Task BlockUserAsync(Guid userId, Guid targetId, CancellationToken ct = default)
+    {
+        if (userId == targetId)
+            throw new ValidationException("You cannot block yourself.");
+
+        var target = await userManager.FindByIdAsync(targetId.ToString())
+            ?? throw new NotFoundException("User", targetId);
+
+        var existing = await db.BlockedUsers
+            .AnyAsync(b => b.BlockerId == userId && b.BlockedId == targetId, ct);
+        if (existing) return; // idempotent
+
+        // Blocking severs any friendship and cancels pending requests between the two.
+        var friendships = await db.Friendships
+            .Where(f => (f.UserId == userId && f.FriendId == targetId) ||
+                        (f.UserId == targetId && f.FriendId == userId))
+            .ToListAsync(ct);
+        db.Friendships.RemoveRange(friendships);
+
+        var pending = await db.FriendRequests
+            .Where(r => r.Status == FriendRequestStatus.Pending && !r.IsDeleted &&
+                        ((r.SenderId == userId && r.ReceiverId == targetId) ||
+                         (r.SenderId == targetId && r.ReceiverId == userId)))
+            .ToListAsync(ct);
+        foreach (var r in pending) r.Status = FriendRequestStatus.Rejected;
+
+        db.BlockedUsers.Add(new BlockedUser
+        {
+            BlockerId = userId,
+            BlockedId = targetId,
+            BlockedName = target.FullName,
+            BlockedProfilePictureUrl = target.ProfilePictureUrl
+        });
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task UnblockUserAsync(Guid userId, Guid targetId, CancellationToken ct = default)
+    {
+        var block = await db.BlockedUsers
+            .FirstOrDefaultAsync(b => b.BlockerId == userId && b.BlockedId == targetId, ct)
+            ?? throw new NotFoundException("Block record", targetId);
+
+        db.BlockedUsers.Remove(block);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<List<UserCardDto>> GetBlockedUsersAsync(Guid userId, CancellationToken ct = default) =>
+        await db.BlockedUsers
+            .Where(b => b.BlockerId == userId)
+            .OrderByDescending(b => b.CreatedAt)
+            .Select(b => new UserCardDto
+            {
+                Id = b.BlockedId,
+                FullName = b.BlockedName,
+                ProfilePictureUrl = b.BlockedProfilePictureUrl
+            })
+            .ToListAsync(ct);
+
+    public async Task<bool> IsBlockedAsync(Guid userId, Guid otherUserId, CancellationToken ct = default) =>
+        await db.BlockedUsers.AnyAsync(b =>
+            (b.BlockerId == userId && b.BlockedId == otherUserId) ||
+            (b.BlockerId == otherUserId && b.BlockedId == userId), ct);
 }

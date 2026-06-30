@@ -5,6 +5,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { ProfileService } from '../../core/services/profile.service';
 import { FriendService } from '../../core/services/friend.service';
@@ -15,13 +16,14 @@ import { UserProfileDto } from '../../core/models/profile.model';
 import { PostDto } from '../../core/models/post.model';
 import { PostCardComponent } from '../feed/post-card/post-card.component';
 import { CreatePostComponent } from '../feed/create-post/create-post.component';
+import { EditProfileDialogComponent } from './edit-profile-dialog.component';
 
 @Component({
   selector: 'app-profile',
   standalone: true,
   imports: [
     CommonModule, RouterLink, MatButtonModule, MatIconModule,
-    MatTabsModule, MatProgressSpinnerModule, MatDialogModule,
+    MatTabsModule, MatProgressSpinnerModule, MatDialogModule, MatMenuModule,
     PostCardComponent, CreatePostComponent
   ],
   templateUrl: './profile.component.html',
@@ -34,6 +36,7 @@ export class ProfileComponent implements OnInit {
   private friendSvc = inject(FriendService);
   private postSvc = inject(PostService);
   private callSvc = inject(CallService);
+  private dialog = inject(MatDialog);
   auth = inject(AuthService);
 
   profile = signal<UserProfileDto | null>(null);
@@ -91,9 +94,43 @@ export class ProfileComponent implements OnInit {
     if (!file) return;
     this.profileSvc.uploadProfilePicture(file).subscribe({
       next: res => {
-        if (res.success) this.profile.update(p => p ? { ...p, profilePictureUrl: res.data.url } : p);
+        if (res.success) {
+          this.profile.update(p => p ? { ...p, profilePictureUrl: res.data.profilePictureUrl } : p);
+          const u = this.auth.currentUser();
+          if (u) this.auth.updateCurrentUser({ ...u, profilePictureUrl: res.data.profilePictureUrl });
+        }
       }
     });
+  }
+
+  uploadCoverPhoto(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    this.profileSvc.uploadCoverPhoto(file).subscribe({
+      next: res => {
+        if (res.success) this.profile.update(p => p ? { ...p, coverPhotoUrl: res.data.coverPhotoUrl } : p);
+      }
+    });
+  }
+
+  blockUser(): void {
+    if (!confirm('Block this user?')) return;
+    this.friendSvc.blockUser(this.userId).subscribe({
+      next: () => this.profile.update(p => p ? { ...p, friendshipStatus: 'Blocked' } : p)
+    });
+  }
+
+  unblockUser(): void {
+    this.friendSvc.unblockUser(this.userId).subscribe({
+      next: () => this.profile.update(p => p ? { ...p, friendshipStatus: 'None' } : p)
+    });
+  }
+
+  openEditProfile(): void {
+    const profile = this.profile();
+    if (!profile) return;
+    const ref = this.dialog.open(EditProfileDialogComponent, { data: { profile }, width: '560px', maxWidth: '95vw' });
+    ref.afterClosed().subscribe(changed => { if (changed) this.loadProfile(); });
   }
 
   startVideoCall(): void {

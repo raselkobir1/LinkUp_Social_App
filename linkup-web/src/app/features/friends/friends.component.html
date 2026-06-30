@@ -36,6 +36,32 @@
       </div>
     </mat-tab>
 
+    <!-- Sent requests -->
+    <mat-tab [label]="'Sent' + (sentRequests().length ? ' (' + sentRequests().length + ')' : '')">
+      <div class="mt-4">
+        @if (sentRequests().length === 0) {
+          <div class="text-center py-12 text-gray-400">No sent requests</div>
+        }
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          @for (req of sentRequests(); track req.id) {
+            <div class="bg-white rounded-xl shadow-sm p-4">
+              <a [routerLink]="['/profile', req.receiverId]" class="flex items-center gap-3 mb-3 no-underline">
+                <img [src]="req.senderProfilePicture || 'assets/default-avatar.png'"
+                  class="w-12 h-12 rounded-full object-cover">
+                <div>
+                  <p class="font-semibold text-gray-800">{{ req.receiverName }}</p>
+                  <p class="text-xs text-gray-400">Request sent</p>
+                </div>
+              </a>
+              <button mat-stroked-button class="w-full" (click)="cancelRequest(req.id)">
+                Cancel request
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    </mat-tab>
+
     <!-- Friends list -->
     <mat-tab label="All Friends">
       <div class="mt-4">
@@ -55,9 +81,38 @@
                   }
                 </div>
               </a>
-              <button mat-icon-button (click)="unfriend(friend.userId)" class="text-gray-400" title="Unfriend">
-                <mat-icon>person_remove</mat-icon>
+              <button mat-icon-button [matMenuTriggerFor]="friendMenu" class="text-gray-400" title="More">
+                <mat-icon>more_horiz</mat-icon>
               </button>
+              <mat-menu #friendMenu="matMenu">
+                <button mat-menu-item (click)="unfriend(friend.userId)">
+                  <mat-icon>person_remove</mat-icon> Unfriend
+                </button>
+                <button mat-menu-item (click)="blockUser(friend.userId, friend.fullName, friend.profilePictureUrl)">
+                  <mat-icon>block</mat-icon> Block
+                </button>
+              </mat-menu>
+            </div>
+          }
+        </div>
+      </div>
+    </mat-tab>
+
+    <!-- Blocked -->
+    <mat-tab [label]="'Blocked' + (blocked().length ? ' (' + blocked().length + ')' : '')">
+      <div class="mt-4">
+        @if (blocked().length === 0) {
+          <div class="text-center py-12 text-gray-400">You haven't blocked anyone</div>
+        }
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          @for (user of blocked(); track user.id) {
+            <div class="bg-white rounded-xl shadow-sm p-4 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <img [src]="user.profilePictureUrl || 'assets/default-avatar.png'"
+                  class="w-12 h-12 rounded-full object-cover">
+                <p class="font-semibold text-gray-800">{{ user.fullName }}</p>
+              </div>
+              <button mat-stroked-button (click)="unblockUser(user.id)">Unblock</button>
             </div>
           }
         </div>

@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, PagedResult } from '../models/api-response.model';
@@ -33,17 +33,21 @@ export class ChatService {
     return this.http.put<ApiResponse<MessageDto>>(`${this.base}/messages/${messageId}`, { content });
   }
 
-  deleteMessage(messageId: string): Observable<ApiResponse<object>> {
-    return this.http.delete<ApiResponse<object>>(`${this.base}/messages/${messageId}`);
+  deleteForMe(messageId: string): Observable<ApiResponse<object>> {
+    return this.http.delete<ApiResponse<object>>(`${this.base}/messages/${messageId}/me`);
+  }
+
+  deleteForEveryone(messageId: string): Observable<ApiResponse<object>> {
+    return this.http.delete<ApiResponse<object>>(`${this.base}/messages/${messageId}/everyone`);
   }
 
   markRead(messageId: string): Observable<ApiResponse<object>> {
     return this.http.post<ApiResponse<object>>(`${this.base}/messages/${messageId}/mark-read`, {});
   }
 
-  searchMessages(chatId: string, query: string): Observable<ApiResponse<MessageDto[]>> {
-    return this.http.get<ApiResponse<MessageDto[]>>(`${this.base}/messages/search`, {
-      params: new HttpParams().set('chatId', chatId).set('query', query)
+  searchMessages(chatId: string, query: string): Observable<ApiResponse<PagedResult<MessageDto>>> {
+    return this.http.get<ApiResponse<PagedResult<MessageDto>>>(`${this.base}/${chatId}/messages/search`, {
+      params: new HttpParams().set('query', query)
     });
   }
 
@@ -53,5 +57,31 @@ export class ChatService {
 
   getGroupInfo(groupId: string): Observable<ApiResponse<GroupChatDto>> {
     return this.http.get<ApiResponse<GroupChatDto>>(`${environment.apiUrl}/groups/${groupId}`);
+  }
+
+  updateGroup(chatId: string, dto: { name: string; description?: string }): Observable<ApiResponse<GroupChatDto>> {
+    return this.http.put<ApiResponse<GroupChatDto>>(`${environment.apiUrl}/groups/${chatId}`, dto);
+  }
+
+  addGroupMembers(chatId: string, userIds: string[]): Observable<ApiResponse<GroupChatDto>> {
+    return this.http.post<ApiResponse<GroupChatDto>>(`${environment.apiUrl}/groups/${chatId}/members`, { userIds });
+  }
+
+  removeGroupMember(chatId: string, memberId: string): Observable<ApiResponse<object>> {
+    return this.http.delete<ApiResponse<object>>(`${environment.apiUrl}/groups/${chatId}/members/${memberId}`);
+  }
+
+  makeGroupAdmin(chatId: string, memberId: string): Observable<ApiResponse<object>> {
+    return this.http.post<ApiResponse<object>>(`${environment.apiUrl}/groups/${chatId}/members/${memberId}/make-admin`, {});
+  }
+
+  leaveGroup(chatId: string): Observable<ApiResponse<object>> {
+    return this.http.post<ApiResponse<object>>(`${environment.apiUrl}/groups/${chatId}/leave`, {});
+  }
+
+  changeGroupPhoto(chatId: string, photoUrl: string): Observable<ApiResponse<object>> {
+    // Backend action binds [FromBody] string, so the body must be a JSON-encoded string.
+    return this.http.put<ApiResponse<object>>(`${environment.apiUrl}/groups/${chatId}/photo`,
+      JSON.stringify(photoUrl), { headers: new HttpHeaders({ 'Content-Type': 'application/json' }) });
   }
 }

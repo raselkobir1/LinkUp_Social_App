@@ -240,6 +240,26 @@ public class PostManager(
         return await MapToPostDtoAsync(fullSharedPost, ct);
     }
 
+    public async Task ReportPostAsync(Guid userId, Guid postId, ReportPostDto dto, CancellationToken ct = default)
+    {
+        var post = await db.Posts.FirstOrDefaultAsync(p => p.Id == postId && !p.IsDeleted, ct)
+            ?? throw new NotFoundException("Post", postId);
+
+        // Avoid duplicate open reports from the same user for the same post.
+        var alreadyReported = await db.Reports
+            .AnyAsync(r => r.PostId == postId && r.ReportedById == userId && !r.IsResolved, ct);
+        if (alreadyReported) return;
+
+        db.Reports.Add(new PostReport
+        {
+            PostId = postId,
+            ReportedById = userId,
+            Reason = dto.Reason,
+            CreatedById = userId
+        });
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task IncrementCommentCountAsync(Guid postId, CancellationToken ct = default)
     {
         await db.Posts

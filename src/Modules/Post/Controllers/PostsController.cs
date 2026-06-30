@@ -75,4 +75,12 @@ public class PostsController(IPostManager postManager) : BaseApiController
         var result = await postManager.SharePostAsync(CurrentUserId, dto, ct);
         return ApiCreated(result, "Post shared successfully.");
     }
+
+    [HttpPost("{id:guid}/report")]
+    [Authorize]
+    public async Task<IActionResult> ReportPost(Guid id, [FromBody] ReportPostDto dto, CancellationToken ct)
+    {
+        await postManager.ReportPostAsync(CurrentUserId, id, dto, ct);
+        return ApiOk<object>(null!, "Post reported. Thank you.");
+    }
 }

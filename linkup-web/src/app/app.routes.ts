@@ -21,6 +21,7 @@ export const routes: Routes = [
       { path: 'calls', loadComponent: () => import('./features/calls/call-history.component').then(m => m.CallHistoryComponent) },
       { path: 'notifications', loadComponent: () => import('./features/notifications/notifications.component').then(m => m.NotificationsComponent) },
       { path: 'search', loadComponent: () => import('./features/search/search.component').then(m => m.SearchComponent) },
+      { path: 'settings', loadComponent: () => import('./features/settings/settings.component').then(m => m.SettingsComponent) },
       { path: 'admin', loadChildren: () => import('./features/admin/admin.routes').then(m => m.adminRoutes) },
       { path: 'video-call/:callId', loadComponent: () => import('./features/video-call/video-call.component').then(m => m.VideoCallComponent) },
     ]

@@ -48,4 +48,8 @@ export class PostService {
   share(dto: SharePostDto): Observable<ApiResponse<PostDto>> {
     return this.http.post<ApiResponse<PostDto>>(`${this.base}/${dto.originalPostId}/share`, dto);
   }
+
+  report(id: string, reason: string): Observable<ApiResponse<object>> {
+    return this.http.post<ApiResponse<object>>(`${this.base}/${id}/report`, { reason });
+  }
 }

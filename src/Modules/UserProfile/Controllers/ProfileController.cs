@@ -1,8 +1,11 @@
 using Asp.Versioning;
 using LinkUp.BuildingBlocks.Common.Controllers;
+using LinkUp.Modules.Media.Interfaces;
 using LinkUp.Modules.UserProfile.DTOs;
 using LinkUp.Modules.UserProfile.Interfaces;
+using LinkUp.SharedKernel.Constants;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LinkUp.Modules.UserProfile.Controllers;
@@ -10,7 +13,7 @@ namespace LinkUp.Modules.UserProfile.Controllers;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/profile")]
 [Authorize]
-public class ProfileController(IProfileManager profileManager) : BaseApiController
+public class ProfileController(IProfileManager profileManager, IMediaService mediaService) : BaseApiController
 {
     // GET api/v1/profile/{userId}
     [HttpGet("{userId:guid}")]
@@ -26,6 +29,26 @@ public class ProfileController(IProfileManager profileManager) : BaseApiControll
     {
         var result = await profileManager.UpdateProfileAsync(CurrentUserId, dto, ct);
         return ApiOk(result, "Profile updated successfully.");
+    }
+
+    // POST api/v1/profile/picture — upload + set the current user's profile picture
+    [HttpPost("picture")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadProfilePicture(IFormFile file, CancellationToken ct)
+    {
+        var upload = await mediaService.UploadImageAsync(file, AppConstants.Media.ProfilePictureFolder, CurrentUserId, ct);
+        var result = await profileManager.UploadProfilePictureAsync(CurrentUserId, upload.Url, ct);
+        return ApiOk(result, "Profile picture updated.");
+    }
+
+    // POST api/v1/profile/cover — upload + set the current user's cover photo
+    [HttpPost("cover")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadCoverPhoto(IFormFile file, CancellationToken ct)
+    {
+        var upload = await mediaService.UploadImageAsync(file, AppConstants.Media.CoverPhotoFolder, CurrentUserId, ct);
+        var result = await profileManager.UploadCoverPhotoAsync(CurrentUserId, upload.Url, ct);
+        return ApiOk(result, "Cover photo updated.");
     }
 
     // GET api/v1/profile/{userId}/education

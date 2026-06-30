@@ -27,6 +27,10 @@ var builder = WebApplication.CreateBuilder(args);
 var services = builder.Services;
 var configuration = builder.Configuration;
 
+// Local secrets (Cloudinary keys, etc.) — gitignored, optional. Loaded last so it
+// overrides the placeholder values committed in appsettings*.json.
+configuration.AddJsonFile("appsettings.Secrets.json", optional: true, reloadOnChange: true);
+
 // ─── Serilog ───────────────────────────────────────────────────────────────
 builder.Host.UseSerilog((ctx, cfg) =>
     cfg.ReadFrom.Configuration(ctx.Configuration)
@@ -211,6 +215,8 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "LinkUp API v1"));
+    // Land on Swagger when hitting the site root (otherwise "/" returns 404).
+    app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 }
 
 app.UseHttpsRedirection();

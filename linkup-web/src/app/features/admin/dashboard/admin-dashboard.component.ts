@@ -17,6 +17,7 @@ import { DashboardStats } from '../../../core/models/admin.model';
       <div class="flex gap-2 mb-6">
         <a routerLink="/admin/users" class="px-4 py-2 rounded-lg bg-[#1877f2] text-white text-sm font-medium no-underline">Manage Users</a>
         <a routerLink="/admin/posts" class="px-4 py-2 rounded-lg bg-white border border-gray-200 text-gray-700 text-sm font-medium no-underline">Manage Posts</a>
+        <a routerLink="/admin/reports" class="px-4 py-2 rounded-lg bg-white border border-gray-200 text-gray-700 text-sm font-medium no-underline">Reported Posts</a>
       </div>
 
       @if (loading()) {

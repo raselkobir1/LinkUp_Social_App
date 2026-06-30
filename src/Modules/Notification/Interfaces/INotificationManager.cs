@@ -11,4 +11,7 @@ public interface INotificationManager
     Task MarkAllAsReadAsync(Guid userId, CancellationToken ct = default);
     Task<int> GetUnreadCountAsync(Guid userId, CancellationToken ct = default);
     Task DeleteNotificationAsync(Guid notificationId, Guid userId, CancellationToken ct = default);
+
+    Task<NotificationSettingsDto> GetSettingsAsync(Guid userId, CancellationToken ct = default);
+    Task<NotificationSettingsDto> UpdateSettingsAsync(Guid userId, NotificationSettingsDto dto, CancellationToken ct = default);
 }

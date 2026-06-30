@@ -1,15 +1,38 @@
 using AutoMapper;
 using LinkUp.BuildingBlocks.Common.Exceptions;
+using LinkUp.Modules.Identity.Entities;
 using LinkUp.Modules.UserProfile.Configuration;
 using LinkUp.Modules.UserProfile.DTOs;
 using LinkUp.Modules.UserProfile.Entities;
 using LinkUp.Modules.UserProfile.Interfaces;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinkUp.Modules.UserProfile.Managers;
 
-public class ProfileManager(ProfileDbContext db, IMapper mapper) : IProfileManager
+public class ProfileManager(ProfileDbContext db, IMapper mapper, UserManager<ApplicationUser> userManager) : IProfileManager
 {
+    private async Task<Entities.UserProfile> EnsureProfileAsync(Guid userId, CancellationToken ct)
+    {
+        var profile = await db.Profiles.FirstOrDefaultAsync(p => p.UserId == userId && !p.IsDeleted, ct);
+        if (profile is null)
+        {
+            profile = new Entities.UserProfile { UserId = userId };
+            db.Profiles.Add(profile);
+        }
+        return profile;
+    }
+
+    private async Task SyncUserAvatarAsync(Guid userId, string? pictureUrl, string? coverUrl)
+    {
+        // Friends/posts/chat DTOs read the avatar from ApplicationUser, so keep it in sync.
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        if (user is null) return;
+        if (pictureUrl is not null) user.ProfilePictureUrl = pictureUrl;
+        if (coverUrl is not null) user.CoverPhotoUrl = coverUrl;
+        await userManager.UpdateAsync(user);
+    }
+
     public async Task<UserProfileDto> GetProfileAsync(Guid userId, Guid viewerId, CancellationToken ct = default)
     {
         var profile = await db.Profiles
@@ -65,27 +88,23 @@ public class ProfileManager(ProfileDbContext db, IMapper mapper) : IProfileManag
 
     public async Task<UserProfileDto> UploadProfilePictureAsync(Guid userId, string url, CancellationToken ct = default)
     {
-        var profile = await db.Profiles
-            .FirstOrDefaultAsync(p => p.UserId == userId && !p.IsDeleted, ct)
-            ?? throw new NotFoundException("Profile", userId);
-
+        var profile = await EnsureProfileAsync(userId, ct);
         profile.ProfilePictureUrl = url;
         profile.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
+        await SyncUserAvatarAsync(userId, url, null);
         return mapper.Map<UserProfileDto>(profile);
     }
 
     public async Task<UserProfileDto> UploadCoverPhotoAsync(Guid userId, string url, CancellationToken ct = default)
     {
-        var profile = await db.Profiles
-            .FirstOrDefaultAsync(p => p.UserId == userId && !p.IsDeleted, ct)
-            ?? throw new NotFoundException("Profile", userId);
-
+        var profile = await EnsureProfileAsync(userId, ct);
         profile.CoverPhotoUrl = url;
         profile.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
+        await SyncUserAvatarAsync(userId, null, url);
         return mapper.Map<UserProfileDto>(profile);
     }
 

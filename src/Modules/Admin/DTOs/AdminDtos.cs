@@ -52,3 +52,17 @@ public class AdminPostDto
     public int CommentCount { get; set; }
     public bool IsDeleted { get; set; }
 }
+
+public class AdminReportDto
+{
+    public Guid Id { get; set; }
+    public Guid PostId { get; set; }
+    public string? PostContent { get; set; }
+    public Guid PostAuthorId { get; set; }
+    public string PostAuthorName { get; set; } = string.Empty;
+    public Guid ReportedById { get; set; }
+    public string ReportedByName { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public bool IsResolved { get; set; }
+    public DateTime CreatedAt { get; set; }
+}

@@ -42,10 +42,11 @@ export interface MessageAttachmentDto {
 
 export interface SendMessageDto {
   chatId: string;
-  content: string;
+  content?: string;
   messageType: MessageType;
   replyToMessageId?: string;
-  attachmentUrls?: string[];
+  attachmentUrl?: string;
+  attachmentType?: string;
 }
 
 export interface GroupChatDto {

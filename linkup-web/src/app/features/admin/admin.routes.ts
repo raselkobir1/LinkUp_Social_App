@@ -5,4 +5,5 @@ export const adminRoutes: Routes = [
   { path: 'dashboard', loadComponent: () => import('./dashboard/admin-dashboard.component').then(m => m.AdminDashboardComponent) },
   { path: 'users', loadComponent: () => import('./users/admin-users.component').then(m => m.AdminUsersComponent) },
   { path: 'posts', loadComponent: () => import('./posts/admin-posts.component').then(m => m.AdminPostsComponent) },
+  { path: 'reports', loadComponent: () => import('./reports/admin-reports.component').then(m => m.AdminReportsComponent) },
 ];

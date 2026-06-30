@@ -51,4 +51,20 @@ public class NotificationController(INotificationManager notificationManager) : 
         await notificationManager.DeleteNotificationAsync(id, CurrentUserId, ct);
         return ApiOk<object>(null!, "Notification deleted.");
     }
+
+    [HttpGet("settings")]
+    [Authorize]
+    public async Task<IActionResult> GetSettings(CancellationToken ct)
+    {
+        var result = await notificationManager.GetSettingsAsync(CurrentUserId, ct);
+        return ApiOk(result);
+    }
+
+    [HttpPut("settings")]
+    [Authorize]
+    public async Task<IActionResult> UpdateSettings([FromBody] DTOs.NotificationSettingsDto dto, CancellationToken ct)
+    {
+        var result = await notificationManager.UpdateSettingsAsync(CurrentUserId, dto, ct);
+        return ApiOk(result, "Notification settings updated.");
+    }
 }

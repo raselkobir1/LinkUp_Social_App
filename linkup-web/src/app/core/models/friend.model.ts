@@ -25,3 +25,10 @@ export interface MutualFriendDto {
   fullName: string;
   profilePictureUrl?: string;
 }
+
+export interface BlockedUserDto {
+  id: string;
+  fullName: string;
+  profilePictureUrl?: string;
+  coverPhotoUrl?: string;
+}

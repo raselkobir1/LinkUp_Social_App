@@ -24,9 +24,6 @@ appsettings.Production.json
 appsettings.Secrets.json
 secrets.json
 
-## EF Core
-Migrations/
-
 ## Docker
 .dockerignore
 

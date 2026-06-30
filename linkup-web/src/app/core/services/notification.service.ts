@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, PagedResult } from '../models/api-response.model';
-import { NotificationDto } from '../models/notification.model';
+import { NotificationDto, NotificationSettingsDto } from '../models/notification.model';
 
 @Injectable({ providedIn: 'root' })
 export class NotificationService {
@@ -27,11 +27,19 @@ export class NotificationService {
     return this.http.put<ApiResponse<object>>(`${this.base}/read-all`, {});
   }
 
-  getUnreadCount(): Observable<ApiResponse<number>> {
-    return this.http.get<ApiResponse<number>>(`${this.base}/unread-count`);
+  getUnreadCount(): Observable<ApiResponse<{ unreadCount: number }>> {
+    return this.http.get<ApiResponse<{ unreadCount: number }>>(`${this.base}/unread-count`);
   }
 
   delete(id: string): Observable<ApiResponse<object>> {
     return this.http.delete<ApiResponse<object>>(`${this.base}/${id}`);
+  }
+
+  getSettings(): Observable<ApiResponse<NotificationSettingsDto>> {
+    return this.http.get<ApiResponse<NotificationSettingsDto>>(`${this.base}/settings`);
+  }
+
+  updateSettings(dto: NotificationSettingsDto): Observable<ApiResponse<NotificationSettingsDto>> {
+    return this.http.put<ApiResponse<NotificationSettingsDto>>(`${this.base}/settings`, dto);
   }
 }

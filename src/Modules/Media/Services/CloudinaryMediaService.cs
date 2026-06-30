@@ -31,7 +31,11 @@ public class CloudinaryMediaService(Cloudinary cloudinary, MediaDbContext db) : 
             Folder = folder,
             UseFilename = false,
             UniqueFilename = true,
-            Overwrite = false
+            Overwrite = false,
+            // Compress on ingest: cap dimensions and let Cloudinary pick optimal quality/format.
+            Transformation = new Transformation()
+                .Width(1600).Height(1600).Crop("limit")
+                .Quality("auto").FetchFormat("auto")
         };
 
         var result = await cloudinary.UploadAsync(uploadParams, ct);
@@ -44,6 +48,7 @@ public class CloudinaryMediaService(Cloudinary cloudinary, MediaDbContext db) : 
             UserId = userId,
             PublicId = result.PublicId,
             Url = result.SecureUrl.ToString(),
+            ThumbnailUrl = GetImageThumbnailUrl(result.PublicId, 320, 320),
             FileType = MediaFileType.Image,
             Format = result.Format,
             SizeInBytes = result.Bytes,
@@ -60,6 +65,7 @@ public class CloudinaryMediaService(Cloudinary cloudinary, MediaDbContext db) : 
             Id = mediaFile.Id,
             PublicId = mediaFile.PublicId,
             Url = mediaFile.Url,
+            ThumbnailUrl = mediaFile.ThumbnailUrl,
             FileType = MediaFileType.Image,
             Format = mediaFile.Format,
             Width = mediaFile.Width,
@@ -143,6 +149,18 @@ public class CloudinaryMediaService(Cloudinary cloudinary, MediaDbContext db) : 
         }
 
         return result.Result == "ok";
+    }
+
+    /// <summary>Build a compressed square thumbnail URL for an uploaded image.</summary>
+    private string GetImageThumbnailUrl(string publicId, int width, int height)
+    {
+        var transformation = new Transformation()
+            .Width(width).Height(height).Crop("fill")
+            .Quality("auto").FetchFormat("auto");
+
+        return cloudinary.Api.UrlImgUp
+            .Transform(transformation)
+            .BuildUrl($"{publicId}.jpg");
     }
 
     public string GetThumbnailUrl(string publicId, int width, int height)

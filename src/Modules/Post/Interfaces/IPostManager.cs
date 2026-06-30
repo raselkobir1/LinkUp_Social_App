@@ -13,6 +13,7 @@ public interface IPostManager
     Task<PagedResult<PostDto>> GetWallPostsAsync(Guid wallUserId, Guid viewerId, PagedRequest request, CancellationToken ct = default);
     Task<PagedResult<PostDto>> GetFeedAsync(Guid userId, PagedRequest request, CancellationToken ct = default);
     Task<PostDto> SharePostAsync(Guid userId, SharePostDto dto, CancellationToken ct = default);
+    Task ReportPostAsync(Guid userId, Guid postId, ReportPostDto dto, CancellationToken ct = default);
     Task IncrementCommentCountAsync(Guid postId, CancellationToken ct = default);
     Task IncrementReactionCountAsync(Guid postId, CancellationToken ct = default);
     Task DecrementCommentCountAsync(Guid postId, CancellationToken ct = default);

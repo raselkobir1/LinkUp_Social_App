@@ -4,6 +4,8 @@
     <ProjectReference Include="..\..\BuildingBlocks\LinkUp.BuildingBlocks.csproj" />
     <ProjectReference Include="..\..\SharedKernel\LinkUp.SharedKernel.csproj" />
     <ProjectReference Include="..\Identity\LinkUp.Modules.Identity.csproj" />
+    <ProjectReference Include="..\Notification\LinkUp.Modules.Notification.csproj" />
+    <ProjectReference Include="..\Post\LinkUp.Modules.Post.csproj" />
   </ItemGroup>
 
   <ItemGroup>

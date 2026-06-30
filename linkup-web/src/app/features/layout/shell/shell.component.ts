@@ -35,6 +35,10 @@ export class ShellComponent implements OnInit {
   ngOnInit(): void {
     // Connect the video-call signaling hub app-wide so incoming calls ring anywhere.
     this.callService.init().catch(() => {});
+    // Seed the notification badge with the persisted unread count (live updates arrive via the hub).
+    this.notifService.getUnreadCount().subscribe({
+      next: r => { if (r.success && r.data) this.notifService.unreadCount.set(r.data.unreadCount); }
+    });
   }
 
   onSearch(event: Event): void {

@@ -3,6 +3,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\BuildingBlocks\LinkUp.BuildingBlocks.csproj" />
     <ProjectReference Include="..\..\SharedKernel\LinkUp.SharedKernel.csproj" />
+    <ProjectReference Include="..\Identity\LinkUp.Modules.Identity.csproj" />
+    <ProjectReference Include="..\Media\LinkUp.Modules.Media.csproj" />
   </ItemGroup>
 
   <ItemGroup>

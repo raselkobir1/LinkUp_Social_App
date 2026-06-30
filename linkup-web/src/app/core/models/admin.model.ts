@@ -33,3 +33,16 @@ export interface AdminPost {
   commentCount: number;
   isDeleted: boolean;
 }
+
+export interface AdminReport {
+  id: string;
+  postId: string;
+  postContent?: string;
+  postAuthorId: string;
+  postAuthorName: string;
+  reportedById: string;
+  reportedByName: string;
+  reason: string;
+  isResolved: boolean;
+  createdAt: string;
+}
