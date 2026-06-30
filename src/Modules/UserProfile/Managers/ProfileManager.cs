@@ -1,5 +1,7 @@
 using AutoMapper;
 using LinkUp.BuildingBlocks.Common.Exceptions;
+using LinkUp.BuildingBlocks.Common.Pagination;
+using LinkUp.Modules.Friend.Interfaces;
 using LinkUp.Modules.Identity.Entities;
 using LinkUp.Modules.UserProfile.Configuration;
 using LinkUp.Modules.UserProfile.DTOs;
@@ -10,7 +12,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkUp.Modules.UserProfile.Managers;
 
-public class ProfileManager(ProfileDbContext db, IMapper mapper, UserManager<ApplicationUser> userManager) : IProfileManager
+public class ProfileManager(
+    ProfileDbContext db,
+    IMapper mapper,
+    UserManager<ApplicationUser> userManager,
+    IFriendManager friendManager) : IProfileManager
 {
     private async Task<Entities.UserProfile> EnsureProfileAsync(Guid userId, CancellationToken ct)
     {
@@ -23,16 +29,43 @@ public class ProfileManager(ProfileDbContext db, IMapper mapper, UserManager<App
         return profile;
     }
 
-    // Maps the profile and fills FirstName/LastName from ApplicationUser (the client reads them).
-    private async Task<UserProfileDto> ToDtoAsync(Entities.UserProfile profile)
+    // Builds the full profile the client renders: identity fields from ApplicationUser,
+    // education/experience/social links, and the viewer's relationship + counts.
+    private async Task<UserProfileDto> ToDtoAsync(Entities.UserProfile profile, Guid viewerId, CancellationToken ct)
     {
         var dto = mapper.Map<UserProfileDto>(profile);
-        var user = await userManager.FindByIdAsync(profile.UserId.ToString());
+        var ownerId = profile.UserId;
+
+        var user = await userManager.FindByIdAsync(ownerId.ToString());
         if (user is not null)
         {
             dto.FirstName = user.FirstName;
             dto.LastName = user.LastName;
+            dto.FullName = user.FullName;
+            dto.UserName = user.UserName;
+            dto.Email = user.Email;
+            dto.IsOnline = user.IsOnline;
+            dto.LastSeen = user.LastSeen;
+            dto.ProfilePictureUrl ??= user.ProfilePictureUrl;
+            dto.CoverPhotoUrl ??= user.CoverPhotoUrl;
         }
+
+        dto.Education = await GetEducationsAsync(ownerId, ct);
+        dto.Experience = await GetExperiencesAsync(ownerId, ct);
+        dto.SocialLinks = await GetSocialLinksAsync(ownerId, ct);
+
+        var friends = await friendManager.GetFriendListAsync(
+            ownerId, new PagedRequest { PageNumber = 1, PageSize = 1 }, ct);
+        dto.FriendCount = friends.TotalCount;
+
+        if (viewerId != ownerId)
+        {
+            var status = await friendManager.GetFriendshipStatusAsync(viewerId, ownerId, ct);
+            dto.FriendshipStatus = status.Status.ToString();
+            var mutual = await friendManager.GetMutualFriendsAsync(viewerId, ownerId, ct);
+            dto.MutualFriendCount = mutual.Count;
+        }
+
         return dto;
     }
 
@@ -59,7 +92,7 @@ public class ProfileManager(ProfileDbContext db, IMapper mapper, UserManager<App
             await db.SaveChangesAsync(ct);
         }
 
-        return await ToDtoAsync(profile);
+        return await ToDtoAsync(profile, viewerId, ct);
     }
 
     public async Task<UserProfileDto> UpdateProfileAsync(Guid userId, UpdateProfileDto dto, CancellationToken ct = default)
@@ -97,7 +130,7 @@ public class ProfileManager(ProfileDbContext db, IMapper mapper, UserManager<App
             }
         }
 
-        return await ToDtoAsync(profile);
+        return await ToDtoAsync(profile, userId, ct);
     }
 
     public async Task<UserProfileDto> GetOrCreateProfileAsync(Guid userId, CancellationToken ct = default)
@@ -112,7 +145,7 @@ public class ProfileManager(ProfileDbContext db, IMapper mapper, UserManager<App
             await db.SaveChangesAsync(ct);
         }
 
-        return await ToDtoAsync(profile);
+        return await ToDtoAsync(profile, userId, ct);
     }
 
     public async Task<UserProfileDto> UploadProfilePictureAsync(Guid userId, string url, CancellationToken ct = default)
@@ -123,7 +156,7 @@ public class ProfileManager(ProfileDbContext db, IMapper mapper, UserManager<App
 
         await db.SaveChangesAsync(ct);
         await SyncUserAvatarAsync(userId, url, null);
-        return await ToDtoAsync(profile);
+        return await ToDtoAsync(profile, userId, ct);
     }
 
     public async Task<UserProfileDto> UploadCoverPhotoAsync(Guid userId, string url, CancellationToken ct = default)
@@ -134,7 +167,7 @@ public class ProfileManager(ProfileDbContext db, IMapper mapper, UserManager<App
 
         await db.SaveChangesAsync(ct);
         await SyncUserAvatarAsync(userId, null, url);
-        return await ToDtoAsync(profile);
+        return await ToDtoAsync(profile, userId, ct);
     }
 
     // --- Education ---

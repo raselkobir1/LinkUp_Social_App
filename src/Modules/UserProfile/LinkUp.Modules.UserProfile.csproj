@@ -5,6 +5,7 @@
     <ProjectReference Include="..\..\SharedKernel\LinkUp.SharedKernel.csproj" />
     <ProjectReference Include="..\Identity\LinkUp.Modules.Identity.csproj" />
     <ProjectReference Include="..\Media\LinkUp.Modules.Media.csproj" />
+    <ProjectReference Include="..\Friend\LinkUp.Modules.Friend.csproj" />
   </ItemGroup>
 
   <ItemGroup>
