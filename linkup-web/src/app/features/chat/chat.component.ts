@@ -72,8 +72,10 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.chatHub.message$.subscribe(msg => {
         const active = this.activeChat();
         if (msg.chatId === active?.id) {
-          this.messages.update(m => [...m, msg]);
-          this.scrollToBottom = true;
+          // The server broadcasts to the whole chat group, including the sender,
+          // who already appended this message from the REST response. appendMessage
+          // dedups by id so a message is never shown twice (notably in group chats).
+          this.appendMessage(msg);
           if (msg.senderId !== this.auth.currentUser()?.id) this.chatHub.markAsRead(msg.id, msg.chatId);
         }
         this.chats.update(list => list.map(c =>
@@ -159,14 +161,15 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.chatHub.sendTyping(chatId, false);
 
     this.chatSvc.sendMessage({ chatId, content, messageType: 'Text', replyToMessageId }).subscribe({
-      next: res => {
-        if (res.success) {
-          this.messages.update(m => [...m, res.data]);
-          this.scrollToBottom = true;
-        }
-      }
+      next: res => { if (res.success) this.appendMessage(res.data); }
     });
     this.replyTo.set(null);
+  }
+
+  /** Append a message, ignoring duplicates (same id may arrive via REST and SignalR). */
+  private appendMessage(msg: MessageDto): void {
+    this.messages.update(m => m.some(x => x.id === msg.id) ? m : [...m, msg]);
+    this.scrollToBottom = true;
   }
 
   addEmoji(emoji: string): void {
@@ -223,7 +226,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
           chatId, content: file.name, messageType, attachmentUrl: res.data.url, attachmentType: messageType,
           replyToMessageId: this.replyTo()?.id
         }).subscribe({
-          next: r => { if (r.success) { this.messages.update(m => [...m, r.data]); this.scrollToBottom = true; this.replyTo.set(null); } }
+          next: r => { if (r.success) { this.appendMessage(r.data); this.replyTo.set(null); } }
         });
       },
       error: () => this.uploading.set(false)
@@ -261,7 +264,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
         this.uploading.set(false);
         if (!res.success) return;
         this.chatSvc.sendMessage({ chatId, content: 'Voice message', messageType: 'Voice', attachmentUrl: res.data.url, attachmentType: 'Voice' }).subscribe({
-          next: r => { if (r.success) { this.messages.update(m => [...m, r.data]); this.scrollToBottom = true; } }
+          next: r => { if (r.success) this.appendMessage(r.data); }
         });
       },
       error: () => this.uploading.set(false)

@@ -23,6 +23,14 @@ public class FriendRequestDto
     public FriendRequestStatus Status { get; set; }
     public DateTime SentAt { get; set; }
     public DateTime? RespondedAt { get; set; }
+    public int MutualFriendCount { get; set; }
+
+    // Flat fields the Angular client reads.
+    public Guid SenderId => Sender?.Id ?? Guid.Empty;
+    public string SenderName => Sender?.FullName ?? string.Empty;
+    public string? SenderProfilePicture => Sender?.ProfilePictureUrl;
+    public Guid ReceiverId => Receiver?.Id ?? Guid.Empty;
+    public string ReceiverName => Receiver?.FullName ?? string.Empty;
 }
 
 public class FriendDto
@@ -30,6 +38,12 @@ public class FriendDto
     public Guid UserId { get; set; }
     public UserCardDto FriendInfo { get; set; } = null!;
     public DateTime FriendSince { get; set; }
+    public int MutualFriendCount { get; set; }
+
+    // Flat fields the Angular client reads.
+    public string FullName => FriendInfo?.FullName ?? string.Empty;
+    public string? ProfilePictureUrl => FriendInfo?.ProfilePictureUrl;
+    public DateTime FriendsSince => FriendSince;
 }
 
 public class FriendshipStatusDto

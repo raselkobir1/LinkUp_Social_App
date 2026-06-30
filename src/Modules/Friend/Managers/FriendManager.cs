@@ -166,7 +166,8 @@ public class FriendManager(
 
         var dtos = items.Select(f => new FriendDto
         {
-            UserId = f.UserId,
+            // UserId is the friend's id — the client navigates/unfriends/blocks by it.
+            UserId = f.FriendId,
             FriendInfo = new UserCardDto
             {
                 Id = f.FriendId,
@@ -265,7 +266,7 @@ public class FriendManager(
         return new FriendshipStatusDto { Status = FriendshipStatus.None };
     }
 
-    public async Task<List<UserCardDto>> GetFriendSuggestionsAsync(Guid userId, int count, CancellationToken ct = default)
+    public async Task<List<FriendDto>> GetFriendSuggestionsAsync(Guid userId, int count, CancellationToken ct = default)
     {
         // Suggestions: friends-of-friends not yet friends with the user
         var myFriendIds = await db.Friendships
@@ -283,21 +284,32 @@ public class FriendManager(
 
         var excludedIds = myFriendIds.Concat(pendingIds).Append(userId).Distinct().ToList();
 
-        var suggestions = await db.Friendships
+        var grouped = await db.Friendships
             .AsNoTracking()
             .Where(f => myFriendIds.Contains(f.UserId) && !excludedIds.Contains(f.FriendId))
             .GroupBy(f => new { f.FriendId, f.FriendName, f.FriendProfilePictureUrl })
-            .OrderByDescending(g => g.Count())
-            .Take(count)
-            .Select(g => new UserCardDto
+            .Select(g => new
             {
-                Id = g.Key.FriendId,
-                FullName = g.Key.FriendName,
-                ProfilePictureUrl = g.Key.FriendProfilePictureUrl
+                g.Key.FriendId,
+                g.Key.FriendName,
+                g.Key.FriendProfilePictureUrl,
+                MutualCount = g.Count()
             })
+            .OrderByDescending(x => x.MutualCount)
+            .Take(count)
             .ToListAsync(ct);
 
-        return suggestions;
+        return grouped.Select(x => new FriendDto
+        {
+            UserId = x.FriendId,
+            FriendInfo = new UserCardDto
+            {
+                Id = x.FriendId,
+                FullName = x.FriendName,
+                ProfilePictureUrl = x.FriendProfilePictureUrl
+            },
+            MutualFriendCount = x.MutualCount
+        }).ToList();
     }
 
     public async Task<bool> IsFriendAsync(Guid userId, Guid otherUserId, CancellationToken ct = default)

@@ -17,7 +17,7 @@ public interface IFriendManager
 
     Task<List<UserCardDto>> GetMutualFriendsAsync(Guid userId, Guid otherUserId, CancellationToken ct = default);
     Task<FriendshipStatusDto> GetFriendshipStatusAsync(Guid userId, Guid otherUserId, CancellationToken ct = default);
-    Task<List<UserCardDto>> GetFriendSuggestionsAsync(Guid userId, int count, CancellationToken ct = default);
+    Task<List<FriendDto>> GetFriendSuggestionsAsync(Guid userId, int count, CancellationToken ct = default);
     Task<bool> IsFriendAsync(Guid userId, Guid otherUserId, CancellationToken ct = default);
 
     Task BlockUserAsync(Guid userId, Guid targetId, CancellationToken ct = default);
