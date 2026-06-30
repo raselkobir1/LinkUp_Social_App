@@ -70,8 +70,14 @@ export class CallService {
     };
     burst();
     this.ringInterval = setInterval(burst, 3000);
-    // Auto-stop after 35s if unanswered (treat as a missed call).
-    this.ringTimeout = setTimeout(() => { this.stopRingtone(); this.incomingCall.set(null); }, 35000);
+    // Auto-stop after 35s if unanswered (treat as a missed call) and tell the
+    // caller so their side ends too — otherwise the caller rings forever.
+    this.ringTimeout = setTimeout(() => {
+      const call = this.incomingCall();
+      if (call) this.hub.declineCall(call.callId, call.callerId);
+      this.stopRingtone();
+      this.incomingCall.set(null);
+    }, 35000);
   }
 
   private stopRingtone(): void {

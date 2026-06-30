@@ -58,6 +58,7 @@ export class VideoCallComponent implements OnInit, OnDestroy {
   friends = signal<{ userId: string; fullName: string; profilePictureUrl?: string }[]>([]);
 
   private durationTimer?: ReturnType<typeof setInterval>;
+  private noAnswerTimer?: ReturnType<typeof setTimeout>;
   private subs: Subscription[] = [];
   private conns = new Map<string, PeerConn>();
   private localStream?: MediaStream;
@@ -76,6 +77,14 @@ export class VideoCallComponent implements OnInit, OnDestroy {
     await this.initLocalMedia();
     // Join only after media + handlers are ready, so we never miss the participant list.
     this.hub.joinCall(this.callId);
+
+    // No-answer fallback: if a 1:1 call never connects (callee offline or never
+    // answered), end it instead of ringing forever.
+    if (!this.isGroup()) {
+      this.noAnswerTimer = setTimeout(() => {
+        if (this.callStatus() === 'connecting') this.endLocally();
+      }, 45000);
+    }
   }
 
   private wireSignaling(): void {
@@ -183,6 +192,7 @@ export class VideoCallComponent implements OnInit, OnDestroy {
   private markActive(): void {
     if (this.callStatus() === 'connecting') {
       this.callStatus.set('active');
+      clearTimeout(this.noAnswerTimer);
       this.durationTimer = setInterval(() => this.duration.update(d => d + 1), 1000);
     }
     this.updateHook();
@@ -190,7 +200,11 @@ export class VideoCallComponent implements OnInit, OnDestroy {
 
   /** getUserMedia that survives a transient stall — retry a few times. */
   private async initLocalMedia(): Promise<void> {
-    const constraints = { video: this.isVideoCall(), audio: true };
+    const constraints = {
+      video: this.isVideoCall(),
+      // Browser-level noise cancellation / echo removal / auto gain.
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    };
     const withTimeout = (p: Promise<MediaStream>, ms: number) =>
       Promise.race([p, new Promise<MediaStream>((_, rej) => setTimeout(() => rej(new Error('gum-timeout')), ms))]);
     for (let i = 0; i < 3; i++) {
@@ -271,6 +285,7 @@ export class VideoCallComponent implements OnInit, OnDestroy {
 
   private cleanup(): void {
     clearInterval(this.durationTimer);
+    clearTimeout(this.noAnswerTimer);
     this.conns.forEach(c => c.pc.close());
     this.conns.clear();
     this.localStream?.getTracks().forEach(t => t.stop());
