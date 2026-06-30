@@ -1,6 +1,5 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef, NgZone, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { PostService } from '../../core/services/post.service';
 import { PostDto } from '../../core/models/post.model';
@@ -11,12 +10,13 @@ import { AuthService } from '../../core/services/auth.service';
 @Component({
   selector: 'app-feed',
   standalone: true,
-  imports: [CommonModule, MatButtonModule, MatProgressSpinnerModule, PostCardComponent, CreatePostComponent],
+  imports: [CommonModule, MatProgressSpinnerModule, PostCardComponent, CreatePostComponent],
   templateUrl: './feed.component.html',
   styleUrls: ['./feed.component.scss']
 })
-export class FeedComponent implements OnInit {
+export class FeedComponent implements OnInit, AfterViewInit, OnDestroy {
   private postSvc = inject(PostService);
+  private zone = inject(NgZone);
   auth = inject(AuthService);
 
   posts = signal<PostDto[]>([]);
@@ -25,7 +25,21 @@ export class FeedComponent implements OnInit {
   page = 1;
   hasMore = true;
 
+  // Sentinel observed by IntersectionObserver to auto-load the next page.
+  @ViewChild('sentinel') private sentinel?: ElementRef<HTMLElement>;
+  private observer?: IntersectionObserver;
+
   ngOnInit(): void { this.loadFeed(); }
+
+  ngAfterViewInit(): void {
+    this.observer = new IntersectionObserver(entries => {
+      // Run inside Angular's zone so loadMore's state changes are picked up.
+      if (entries.some(e => e.isIntersecting)) this.zone.run(() => this.loadMore());
+    }, { rootMargin: '400px' });
+    if (this.sentinel) this.observer.observe(this.sentinel.nativeElement);
+  }
+
+  ngOnDestroy(): void { this.observer?.disconnect(); }
 
   loadFeed(): void {
     this.loading.set(true);
@@ -43,7 +57,7 @@ export class FeedComponent implements OnInit {
   }
 
   loadMore(): void {
-    if (this.loadingMore() || !this.hasMore) return;
+    if (this.loadingMore() || this.loading() || !this.hasMore) return;
     this.loadingMore.set(true);
     this.page++;
     this.postSvc.getFeed(this.page, 10).subscribe({

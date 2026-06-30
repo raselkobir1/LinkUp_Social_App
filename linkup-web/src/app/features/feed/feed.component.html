@@ -28,13 +28,16 @@
     </div>
   }
 
-  <!-- Load More -->
-  @if (hasMore && !loading()) {
-    <div class="flex justify-center mt-4">
-      <button mat-stroked-button (click)="loadMore()" [disabled]="loadingMore()">
-        @if (loadingMore()) { <mat-spinner diameter="20" class="inline mr-2"></mat-spinner> }
-        Load more
-      </button>
+  <!-- Infinite scroll sentinel: when it nears the viewport the next page auto-loads -->
+  <div #sentinel></div>
+
+  @if (loadingMore()) {
+    <div class="flex justify-center py-6">
+      <mat-spinner diameter="28"></mat-spinner>
     </div>
+  }
+
+  @if (!hasMore && !loading() && posts().length > 0) {
+    <p class="text-center text-gray-400 text-sm py-6">You're all caught up 🎉</p>
   }
 </div>
