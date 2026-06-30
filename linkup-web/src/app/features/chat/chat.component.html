@@ -8,6 +8,7 @@
     <div class="flex-1 overflow-y-auto">
       @for (chat of chats(); track chat.id) {
         <button (click)="openChat(chat.id)"
+          [attr.data-testid]="'chat-item-' + chat.otherUserId"
           class="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
           [class.bg-blue-50]="activeChat()?.id === chat.id">
           <div class="relative flex-shrink-0">
@@ -54,14 +55,18 @@
             <p class="text-xs text-green-500">Active now</p>
           }
         </div>
-        <div class="ml-auto flex gap-1">
-          <button mat-icon-button class="text-[#1877f2]" title="Video call">
-            <mat-icon>videocam</mat-icon>
-          </button>
-          <button mat-icon-button class="text-[#1877f2]" title="Voice call">
-            <mat-icon>call</mat-icon>
-          </button>
-        </div>
+        @if (!chat.isGroup) {
+          <div class="ml-auto flex gap-1">
+            <button mat-icon-button class="text-[#1877f2]" title="Video call"
+              (click)="startCall(true)" data-testid="chat-video-call">
+              <mat-icon>videocam</mat-icon>
+            </button>
+            <button mat-icon-button class="text-[#1877f2]" title="Voice call"
+              (click)="startCall(false)" data-testid="chat-voice-call">
+              <mat-icon>call</mat-icon>
+            </button>
+          </div>
+        }
       </div>
 
       <!-- Messages -->

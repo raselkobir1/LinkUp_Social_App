@@ -9,6 +9,7 @@ import { Subscription } from 'rxjs';
 import { ChatService } from '../../core/services/chat.service';
 import { ChatHubService } from '../../core/signalr/chat-hub.service';
 import { AuthService } from '../../core/services/auth.service';
+import { CallService } from '../../core/services/call.service';
 import { ChatListDto, MessageDto } from '../../core/models/chat.model';
 
 @Component({
@@ -24,6 +25,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   private chatSvc = inject(ChatService);
   private chatHub = inject(ChatHubService);
+  private callSvc = inject(CallService);
   auth = inject(AuthService);
   private route = inject(ActivatedRoute);
 
@@ -109,6 +111,12 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   onTyping(): void {
     const chatId = this.activeChat()?.id;
     if (chatId) this.chatHub.sendTyping(chatId, true);
+  }
+
+  startCall(video: boolean): void {
+    const chat = this.activeChat();
+    if (!chat || chat.isGroup || !chat.otherUserId) return;
+    this.callSvc.initiateCall(chat.otherUserId, video ? 'video' : 'audio', chat.otherUserName);
   }
 
   ngAfterViewChecked(): void {

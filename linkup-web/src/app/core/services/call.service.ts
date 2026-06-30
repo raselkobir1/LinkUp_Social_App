@@ -5,14 +5,16 @@ import { VideoCallHubService } from '../signalr/video-call-hub.service';
 export interface IncomingCall {
   callId: string;
   callerId: string;
-  callType: string;
+  callType: string; // 'video' | 'audio'
 }
 
 /** Context handed to the VideoCallComponent when it opens for a given call. */
 export interface CallContext {
   callId: string;
   peerId: string;
+  peerName?: string;
   isCaller: boolean;
+  video: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -38,10 +40,11 @@ export class CallService {
   }
 
   /** Start an outgoing call to a user and open the call screen as the caller. */
-  initiateCall(targetUserId: string, callType: 'OneToOne' | 'Group' = 'OneToOne'): void {
+  initiateCall(targetUserId: string, mode: 'video' | 'audio' = 'video', peerName?: string): void {
     const callId = crypto.randomUUID();
-    this.contexts.set(callId, { callId, peerId: targetUserId, isCaller: true });
-    this.hub.initiateCall(targetUserId, callId, callType);
+    this.contexts.set(callId, { callId, peerId: targetUserId, peerName, isCaller: true, video: mode === 'video' });
+    // The media mode rides along in callType so the callee sets up the same way.
+    this.hub.initiateCall(targetUserId, callId, mode);
     this.router.navigate(['/video-call', callId]);
   }
 
@@ -49,7 +52,9 @@ export class CallService {
   acceptIncoming(): void {
     const call = this.incomingCall();
     if (!call) return;
-    this.contexts.set(call.callId, { callId: call.callId, peerId: call.callerId, isCaller: false });
+    this.contexts.set(call.callId, {
+      callId: call.callId, peerId: call.callerId, isCaller: false, video: call.callType !== 'audio'
+    });
     this.hub.acceptCall(call.callerId, call.callId);
     this.incomingCall.set(null);
     this.router.navigate(['/video-call', call.callId]);

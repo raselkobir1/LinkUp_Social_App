@@ -79,10 +79,10 @@
     data-testid="incoming-call">
     <div class="flex items-center gap-3 mb-4">
       <div class="w-12 h-12 rounded-full bg-[#1877f2] flex items-center justify-center animate-pulse">
-        <mat-icon class="text-white">videocam</mat-icon>
+        <mat-icon class="text-white">{{ call.callType === 'audio' ? 'call' : 'videocam' }}</mat-icon>
       </div>
       <div>
-        <p class="font-semibold text-gray-800">Incoming video call</p>
+        <p class="font-semibold text-gray-800">Incoming {{ call.callType === 'audio' ? 'voice' : 'video' }} call</p>
         <p class="text-sm text-gray-400">Ringing…</p>
       </div>
     </div>

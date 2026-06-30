@@ -97,7 +97,7 @@ export class ProfileComponent implements OnInit {
   }
 
   startVideoCall(): void {
-    this.callSvc.initiateCall(this.userId, 'OneToOne');
+    this.callSvc.initiateCall(this.userId, 'video');
   }
 
   onPostCreated(post: PostDto): void {

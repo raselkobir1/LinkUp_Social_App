@@ -27,6 +27,8 @@ export class VideoCallComponent implements OnInit, OnDestroy {
   isMuted = signal(false);
   isCameraOff = signal(false);
   isScreenSharing = signal(false);
+  isVideoCall = signal(true);
+  peerName = signal('');
   duration = signal(0);
 
   private durationTimer?: ReturnType<typeof setInterval>;
@@ -38,6 +40,9 @@ export class VideoCallComponent implements OnInit, OnDestroy {
   private isCaller = false;
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private remoteSet = false;
+  private peerAccepted = false;          // caller: peer pressed Accept
+  private offerMade = false;
+  private pendingOffer?: RTCSessionDescriptionInit;  // callee: offer that arrived before pc was ready
 
   async ngOnInit(): Promise<void> {
     const ctx = this.callSvc.getContext(this.callId);
@@ -49,6 +54,9 @@ export class VideoCallComponent implements OnInit, OnDestroy {
     }
     this.peerId = ctx.peerId;
     this.isCaller = ctx.isCaller;
+    this.isVideoCall.set(ctx.video);
+    this.isCameraOff.set(!ctx.video);
+    this.peerName.set(ctx.peerName ?? '');
     this.updateHook();
 
     await this.hub.connect();
@@ -58,21 +66,15 @@ export class VideoCallComponent implements OnInit, OnDestroy {
 
   private wireSignaling(): void {
     this.subs.push(
-      // Caller: peer accepted → create and send the offer.
+      // Caller: peer accepted → create and send the offer (once pc is ready).
       this.hub.callAccepted$.subscribe(({ callId }) => {
-        if (callId === this.callId && this.isCaller) this.makeOffer();
+        if (callId === this.callId && this.isCaller) { this.peerAccepted = true; this.tryMakeOffer(); }
       }),
 
-      // Callee: received the offer → answer it.
-      this.hub.sdpOffer$.subscribe(async ({ sdp, fromUserId }) => {
-        if (!this.pc) return;
+      // Callee: received the offer → answer it (buffer if pc not ready yet).
+      this.hub.sdpOffer$.subscribe(({ sdp, fromUserId }) => {
         this.peerId = fromUserId || this.peerId;
-        await this.pc.setRemoteDescription(new RTCSessionDescription(sdp));
-        this.remoteSet = true;
-        await this.flushCandidates();
-        const answer = await this.pc.createAnswer();
-        await this.pc.setLocalDescription(answer);
-        this.hub.sendSdpAnswer(this.peerId, answer);
+        if (this.pc) this.handleOffer(sdp); else this.pendingOffer = sdp;
       }),
 
       // Caller: received the answer.
@@ -97,9 +99,22 @@ export class VideoCallComponent implements OnInit, OnDestroy {
     );
   }
 
+  /** getUserMedia that survives a transient stall — race each attempt against a timeout, retry a few times. */
+  private async getMedia(): Promise<MediaStream> {
+    const constraints = { video: this.isVideoCall(), audio: true };
+    const withTimeout = (p: Promise<MediaStream>, ms: number) =>
+      Promise.race([p, new Promise<MediaStream>((_, rej) => setTimeout(() => rej(new Error('gum-timeout')), ms))]);
+    let lastErr: unknown;
+    for (let i = 0; i < 3; i++) {
+      try { return await withTimeout(navigator.mediaDevices.getUserMedia(constraints), 5000); }
+      catch (e) { lastErr = e; }
+    }
+    throw lastErr;
+  }
+
   private async initWebRTC(): Promise<void> {
     try {
-      this.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      this.localStream = await this.getMedia();
       this.cameraTrack = this.localStream.getVideoTracks()[0];
       if (this.localVideoRef?.nativeElement) {
         this.localVideoRef.nativeElement.srcObject = this.localStream;
@@ -136,6 +151,11 @@ export class VideoCallComponent implements OnInit, OnDestroy {
         }
         this.updateHook();
       };
+
+      this.updateHook();
+      // pc is now ready — resolve any signal that raced ahead of it.
+      if (this.isCaller) this.tryMakeOffer();
+      else if (this.pendingOffer) { const o = this.pendingOffer; this.pendingOffer = undefined; this.handleOffer(o); }
     } catch {
       // Media access denied / unavailable.
       this.callStatus.set('ended');
@@ -143,11 +163,24 @@ export class VideoCallComponent implements OnInit, OnDestroy {
     }
   }
 
-  private async makeOffer(): Promise<void> {
-    if (!this.pc) return;
+  /** Caller: send the offer once BOTH the peer has accepted and pc exists. */
+  private async tryMakeOffer(): Promise<void> {
+    if (!this.isCaller || !this.peerAccepted || !this.pc || this.offerMade) return;
+    this.offerMade = true;
     const offer = await this.pc.createOffer();
     await this.pc.setLocalDescription(offer);
     this.hub.sendSdpOffer(this.peerId, offer);
+  }
+
+  /** Callee: apply the caller's offer and answer it. */
+  private async handleOffer(sdp: RTCSessionDescriptionInit): Promise<void> {
+    if (!this.pc) return;
+    await this.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    this.remoteSet = true;
+    await this.flushCandidates();
+    const answer = await this.pc.createAnswer();
+    await this.pc.setLocalDescription(answer);
+    this.hub.sendSdpAnswer(this.peerId, answer);
   }
 
   private async flushCandidates(): Promise<void> {
@@ -222,6 +255,7 @@ export class VideoCallComponent implements OnInit, OnDestroy {
     (window as any).__videoCall = {
       callId: this.callId,
       role: this.isCaller ? 'caller' : 'callee',
+      video: this.isVideoCall(),
       status: this.callStatus(),
       pcState: this.pc?.connectionState ?? 'none',
       iceState: this.pc?.iceConnectionState ?? 'none',
