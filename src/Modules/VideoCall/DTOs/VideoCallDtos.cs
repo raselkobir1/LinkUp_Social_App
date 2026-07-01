@@ -1,8 +1,21 @@
+using System.Text.Json.Serialization;
 using LinkUp.SharedKernel.Enums;
 
 namespace LinkUp.Modules.VideoCall.DTOs;
 
 public record InitiateCallDto(Guid TargetUserId, CallType Type);
+
+/// <summary>
+/// A WebRTC ICE server. Shape matches the browser's RTCIceServer so the client can
+/// pass the list straight into `new RTCPeerConnection({ iceServers })`.
+/// </summary>
+public class IceServerDto
+{
+    [JsonConverter(typeof(StringOrArrayConverter))]
+    public List<string> Urls { get; set; } = [];
+    public string? Username { get; set; }
+    public string? Credential { get; set; }
+}
 
 public class CallParticipantDto
 {

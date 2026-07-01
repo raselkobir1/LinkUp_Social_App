@@ -8,6 +8,8 @@ import { Router } from '@angular/router';
 import { VideoCallHubService } from '../../core/signalr/video-call-hub.service';
 import { CallService } from '../../core/services/call.service';
 import { FriendService } from '../../core/services/friend.service';
+import { IceService } from '../../core/services/ice.service';
+import { environment } from '../../../environments/environment';
 import { Subscription } from 'rxjs';
 
 /** Binds a MediaStream to a <video> element (Angular has no built-in srcObject binding). */
@@ -44,6 +46,7 @@ export class VideoCallComponent implements OnInit, OnDestroy {
   private hub = inject(VideoCallHubService);
   private callSvc = inject(CallService);
   private friendSvc = inject(FriendService);
+  private ice = inject(IceService);
   private router = inject(Router);
 
   callStatus = signal<'connecting' | 'active' | 'ended'>('connecting');
@@ -63,6 +66,8 @@ export class VideoCallComponent implements OnInit, OnDestroy {
   private conns = new Map<string, PeerConn>();
   private localStream?: MediaStream;
   private cameraTrack?: MediaStreamTrack;
+  // STUN (+ TURN when Metered is configured); resolved once before joining the call.
+  private iceServers: RTCIceServer[] = environment.iceServers;
 
   async ngOnInit(): Promise<void> {
     const ctx = this.callSvc.getContext(this.callId);
@@ -71,6 +76,10 @@ export class VideoCallComponent implements OnInit, OnDestroy {
     this.isGroup.set(ctx.isGroup);
     this.isCameraOff.set(!ctx.video);
     this.updateHook();
+
+    // Resolve ICE servers (fetches TURN credentials when Metered is configured)
+    // before any peer connection is created.
+    this.iceServers = await this.ice.getIceServers();
 
     await this.hub.connect();
     this.wireSignaling();
@@ -119,7 +128,9 @@ export class VideoCallComponent implements OnInit, OnDestroy {
     let entry = this.conns.get(userId);
     if (entry) return entry;
 
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    // STUN + optional TURN, resolved in ngOnInit; WebRTC falls back to TURN
+    // automatically when STUN can't establish a direct P2P path.
+    const pc = new RTCPeerConnection({ iceServers: this.iceServers });
     entry = { pc, pendingCandidates: [], remoteSet: false };
     this.conns.set(userId, entry);
     this.remoteTiles.update(t => t.some(x => x.userId === userId) ? t : [...t, { userId, stream: null }]);

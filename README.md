@@ -23,6 +23,17 @@ work internally over SignalR and WebRTC, with sample code from the source. It co
 
 > The PDF is generated from [`docs/realtime-architecture.html`](docs/realtime-architecture.html).
 
+**[Video Calling — SignalR, WebRTC, STUN & TURN (plain-English guide)](docs/video-call-networking.md)** —
+a beginner-friendly walkthrough of *how a call actually connects* two people across
+different networks. It explains, in order:
+
+1. The two jobs — **SignalR** for signaling vs **WebRTC** for peer-to-peer media
+2. **STUN** (free public-IP discovery) — why ~80% of cross-network calls just work
+3. **TURN** (media relay) — why the hard 20% (corporate NAT / CGNAT / firewalls) need it
+4. How WebRTC auto-falls-back: **direct → STUN → TURN** (you never write the fallback)
+5. Three ways to get TURN compared — **STUN-only (free)** vs **Metered (managed)** vs **self-hosted coturn**
+6. What LinkUp implements: Metered TURN fetched **server-side** (API key stays secret) with a STUN fallback
+
 ## Architecture
 
 ```

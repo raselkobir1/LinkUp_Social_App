@@ -19,6 +19,10 @@ public static class VideoCallModuleExtensions
         services.AddScoped<IVideoCallManager, VideoCallManager>();
         services.AddAutoMapper(typeof(VideoCallMappingProfile));
 
+        // Metered TURN credentials are fetched server-side so the API key stays secret.
+        services.Configure<MeteredOptions>(configuration.GetSection(MeteredOptions.SectionName));
+        services.AddHttpClient<ITurnCredentialService, TurnCredentialService>();
+
         return services;
     }
 }
