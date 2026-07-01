@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LinkUp — Realtime Architecture</title>
+<style>
+  @page { size: A4; margin: 20mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1f2933; line-height: 1.5; font-size: 12px; }
+  h1 { font-size: 30px; color: #1877f2; margin: 0 0 4px; }
+  h2 { font-size: 20px; color: #12447f; border-bottom: 2px solid #1877f2; padding-bottom: 4px; margin-top: 26px; page-break-after: avoid; }
+  h3 { font-size: 15px; color: #1f2933; margin-top: 18px; page-break-after: avoid; }
+  h4 { font-size: 13px; color: #384857; margin: 12px 0 4px; }
+  p, li { font-size: 12px; }
+  code { font-family: "SF Mono", "Consolas", Menlo, monospace; background: #eef1f5; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+  pre { background: #0f1b2d; color: #e6edf3; padding: 12px 14px; border-radius: 6px; overflow-x: auto; font-size: 10.5px; line-height: 1.45; page-break-inside: avoid; }
+  pre code { background: none; color: inherit; padding: 0; font-size: 10.5px; }
+  .cap { color: #6b7683; font-size: 10px; margin: 3px 0 12px; }
+  .lead { font-size: 13px; color: #384857; }
+  .tag { display: inline-block; background: #1877f2; color: #fff; font-size: 9px; padding: 1px 7px; border-radius: 10px; vertical-align: middle; margin-left: 6px; }
+  .box { background: #f2f6fc; border-left: 4px solid #1877f2; padding: 8px 12px; border-radius: 0 6px 6px 0; margin: 10px 0; }
+  .flow { background: #f7f9fb; border: 1px solid #dde3ea; border-radius: 6px; padding: 10px 14px; margin: 10px 0; font-size: 11px; }
+  .flow b { color: #12447f; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+  th, td { border: 1px solid #dde3ea; padding: 5px 8px; text-align: left; font-size: 11px; }
+  th { background: #eef4fc; }
+  .cover { text-align: center; padding-top: 120px; page-break-after: always; }
+  .cover .sub { font-size: 15px; color: #6b7683; margin-top: 8px; }
+  .cover .meta { margin-top: 60px; font-size: 12px; color: #6b7683; }
+  .toc a { color: #12447f; text-decoration: none; }
+  .toc li { margin: 3px 0; }
+  .pagebreak { page-break-before: always; }
+  .arrow { color: #1877f2; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>LinkUp</h1>
+  <div class="sub">Realtime Architecture — How Chat, Notifications, and Audio/Video Calls Work Internally</div>
+  <div class="meta">
+    A step-by-step technical guide with sample code<br>
+    Stack: .NET 10 Web API · SignalR · WebRTC · Angular 22<br>
+    Modular monolith · JWT-authenticated hubs
+  </div>
+</div>
+
+<h2>Table of Contents</h2>
+<ol class="toc">
+  <li><a href="#overview">Architecture Overview</a></li>
+  <li><a href="#signalr">SignalR Fundamentals (connection, groups, auth)</a></li>
+  <li><a href="#chat">Realtime Chat (presence, messages, typing, receipts)</a></li>
+  <li><a href="#notif">Realtime Notifications (cross-module, settings-aware)</a></li>
+  <li><a href="#calls">Audio &amp; Video Calls (WebRTC + SignalR signaling)</a></li>
+  <li><a href="#ring">Ringtone, Call-End Sync &amp; Noise Cancellation</a></li>
+  <li><a href="#client">Client Wiring Summary</a></li>
+</ol>
+
+<h2 id="overview" class="pagebreak">1. Architecture Overview</h2>
+<p class="lead">LinkUp is a modular monolith. Request/response data flows through
+<code>Controller → Manager → DbContext → PostgreSQL</code>. Anything that must reach a
+user <i>without them asking</i> — a new message, a like, an incoming call — is pushed
+over <b>SignalR</b> (a persistent WebSocket connection). Peer-to-peer audio/video media
+itself never touches the server; only its <b>signaling</b> does.</p>
+
+<table>
+  <tr><th>Concern</th><th>Transport</th><th>Hub / Mechanism</th></tr>
+  <tr><td>Chat messages, presence, typing, receipts</td><td>SignalR (server relay)</td><td><code>ChatHub</code></td></tr>
+  <tr><td>Notifications (likes, comments, friend requests)</td><td>SignalR (server push)</td><td><code>NotificationHub</code></td></tr>
+  <tr><td>Call ringing + WebRTC signaling (SDP/ICE)</td><td>SignalR (server relay)</td><td><code>VideoCallHub</code></td></tr>
+  <tr><td>Actual audio/video media</td><td>WebRTC (peer-to-peer)</td><td>Browser <code>RTCPeerConnection</code></td></tr>
+</table>
+
+<div class="box"><b>Key idea:</b> SignalR is the "nervous system." For chat and notifications it
+<i>carries the payload</i>. For calls it only <i>coordinates the handshake</i> — once two browsers
+have exchanged connection details, the audio and video stream directly between them.</div>
+
+<h2 id="signalr">2. SignalR Fundamentals</h2>
+
+<h3>2.1 Connecting with a JWT</h3>
+<p>Every hub is <code>[Authorize]</code>. The Angular client passes the JWT via
+<code>accessTokenFactory</code>. SignalR upgrades to WebSockets and authenticates the
+connection from that token.</p>
+<pre><code>// video-call-hub.service.ts — client connect (idempotent)
+this.hub = new HubConnectionBuilder()
+  .withUrl(`${environment.hubUrl}/videocall`, { accessTokenFactory: () =&gt; token ?? '' })
+  .withAutomaticReconnect()
+  .build();
+await this.hub.start();</code></pre>
+
+<h3>2.2 Groups — how the server targets the right people</h3>
+<p>SignalR <b>groups</b> are the routing primitive. LinkUp uses two conventions:</p>
+<ul>
+  <li><b>Personal group</b> — every connection joins a group named by the user's own id.
+  This lets the server push to "that user, wherever they are connected" (e.g. ring a call, deliver a notification).</li>
+  <li><b>Room group</b> — a connection joins a group named by a <code>chatId</code> or <code>callId</code>
+  to receive everything happening in that conversation/call.</li>
+</ul>
+<pre><code>// On connect: join a personal group so we can be reached directly
+await Groups.AddToGroupAsync(Context.ConnectionId, userId.ToString());
+
+// Server later pushes straight to that user on any device:
+await hubContext.Clients.Group(userId.ToString())
+                        .SendAsync("ReceiveNotification", dto);</code></pre>
+
+<div class="box"><b>Gotcha (fixed in code):</b> SignalR sends <b>positional arguments</b>, not a single
+object. A server call <code>SendAsync("UserTyping", chatId, userId, isTyping)</code> must be
+received as <code>.on('UserTyping', (chatId, userId, isTyping) =&gt; …)</code> — the argument
+order must match exactly.</div>
+
+<h2 id="chat" class="pagebreak">3. Realtime Chat <span class="tag">ChatHub</span></h2>
+
+<h3>3.1 Presence — online / offline / last-seen</h3>
+<p>When a socket connects, the hub flips the user online, joins their personal group and
+<b>all their active chat groups</b>, and broadcasts presence to everyone else. On disconnect it
+records <code>LastSeen</code> and broadcasts offline.</p>
+<pre><code>// ChatHub.cs
+public override async Task OnConnectedAsync()
+{
+    var user = await userManager.FindByIdAsync(CurrentUserId.ToString());
+    user.IsOnline = true; user.LastSeen = DateTime.UtcNow;
+    await userManager.UpdateAsync(user);
+    await Clients.Others.SendAsync("UserOnline", CurrentUserId);
+
+    await Groups.AddToGroupAsync(Context.ConnectionId, CurrentUserId.ToString());
+    var chatIds = await db.ChatParticipants
+        .Where(cp =&gt; cp.UserId == CurrentUserId &amp;&amp; cp.IsActive)
+        .Select(cp =&gt; cp.ChatId).ToListAsync();
+    foreach (var chatId in chatIds)
+        await Groups.AddToGroupAsync(Context.ConnectionId, chatId.ToString());
+    await base.OnConnectedAsync();
+}</code></pre>
+
+<h3>3.2 Sending a message — step by step</h3>
+<div class="flow">
+  <b>1.</b> Client POSTs the message to the REST API (<code>POST /chats/messages</code>).<br>
+  <b>2.</b> <code>ChatManager</code> persists it; marks it <b>Delivered</b> if any recipient is online.<br>
+  <b>3.</b> Manager broadcasts <code>ReceiveMessage</code> to the whole chat group (via <code>IHubContext</code>).<br>
+  <b>4.</b> Every connected member — <i>including the sender</i> — receives it in real time.<br>
+  <b>5.</b> The client de-duplicates by message id (the sender already appended it from the REST reply).
+</div>
+<pre><code>// ChatManager.SendMessageAsync — persist then push over SignalR
+await db.SaveChangesAsync(ct);
+var messageDto = await BuildMessageDtoAsync(message, senderId, ct);
+await hubContext.Clients.Group(dto.ChatId.ToString())
+                        .SendAsync("ReceiveMessage", messageDto, ct);</code></pre>
+<pre><code>// chat.component.ts — client side: dedup so a message never shows twice
+this.chatHub.message$.subscribe(msg =&gt; {
+  if (msg.chatId === this.activeChat()?.id) this.appendMessage(msg);   // guarded by id
+});
+
+private appendMessage(msg: MessageDto): void {
+  this.messages.update(m =&gt; m.some(x =&gt; x.id === msg.id) ? m : [...m, msg]);
+}</code></pre>
+<div class="box"><b>Why the dedup matters:</b> the server broadcasts to the entire group <i>including the
+sender</i>. Without de-duplication by id, the sender's own message would appear twice — very
+visible in group chats.</div>
+
+<h3>3.3 Typing indicator &amp; delivery/read receipts</h3>
+<p>These are lightweight hub methods that relay only to <code>OthersInGroup</code> (never echo to
+the actor):</p>
+<pre><code>// ChatHub.cs
+public async Task SendTypingIndicator(string chatId, bool isTyping) =&gt;
+    await Clients.OthersInGroup(chatId).SendAsync("UserTyping", Guid.Parse(chatId), CurrentUserId, isTyping);
+
+public async Task MarkAsRead(string messageId, string chatId) {
+    await chatManager.MarkReadAsync(Guid.Parse(messageId), CurrentUserId);   // persist
+    await Clients.OthersInGroup(chatId).SendAsync("MessageRead", Guid.Parse(messageId), CurrentUserId);
+}</code></pre>
+
+<h2 id="notif" class="pagebreak">4. Realtime Notifications <span class="tag">NotificationHub</span></h2>
+<p>Notifications are generated <b>cross-module</b>: the Friend, Reaction, Comment and Chat managers
+inject <code>INotificationManager</code> and call one method. It persists the notification,
+<b>honors the recipient's per-category settings</b>, and pushes it to the recipient's personal group
+along with an updated unread count.</p>
+
+<div class="flow">
+  <b>1.</b> A user likes a post <span class="arrow">→</span> <code>ReactionManager</code> calls <code>CreateNotificationAsync(...)</code>.<br>
+  <b>2.</b> Manager checks the recipient's <code>NotificationSettings</code> — disabled categories are silently dropped.<br>
+  <b>3.</b> It saves the row, enriches it with sender name/avatar, then pushes.<br>
+  <b>4.</b> Recipient (on any device) instantly receives <code>ReceiveNotification</code> + <code>NotificationCountUpdated</code>.
+</div>
+
+<pre><code>// NotificationManager.CreateNotificationAsync (abridged)
+if (!await IsTypeEnabledAsync(dto.RecipientId, dto.Type, ct))
+    return ...;                          // setting disabled → suppress
+
+db.Notifications.Add(notification);
+await db.SaveChangesAsync(ct);
+var notificationDto = mapper.Map&lt;NotificationDto&gt;(notification);   // + sender info
+
+var group = dto.RecipientId.ToString();
+await hubContext.Clients.Group(group).SendAsync("ReceiveNotification", notificationDto, ct);
+await hubContext.Clients.Group(group).SendAsync("NotificationCountUpdated", await GetUnreadCountAsync(...));</code></pre>
+
+<pre><code>// NotificationHub.cs — just parks each connection in the user's personal group
+public override async Task OnConnectedAsync() {
+    var userId = Context.User!.FindFirstValue(ClaimTypes.NameIdentifier)!;
+    await Groups.AddToGroupAsync(Context.ConnectionId, userId);
+    await base.OnConnectedAsync();
+}</code></pre>
+<div class="box"><b>Design note:</b> "New message" and "video call" are intentionally <i>not</i> notification-feed
+entries — chat has its own unread badge and calls use the ringing hub, so they aren't duplicated in the feed.</div>
+
+<h2 id="calls" class="pagebreak">5. Audio &amp; Video Calls <span class="tag">VideoCallHub + WebRTC</span></h2>
+<p>A call has two layers: <b>signaling</b> (over SignalR) to set up the connection, and the
+<b>media</b> (over WebRTC) that flows peer-to-peer. The server only relays signaling; it never sees
+audio or video.</p>
+
+<h3>5.1 The WebRTC handshake in plain terms</h3>
+<table>
+  <tr><th>Term</th><th>What it is</th></tr>
+  <tr><td><b>SDP offer / answer</b></td><td>A text description of "here are the codecs and media I can do." Caller offers, callee answers.</td></tr>
+  <tr><td><b>ICE candidate</b></td><td>A possible network path (IP/port) to reach a peer. Both sides trickle these to each other.</td></tr>
+  <tr><td><b>STUN server</b></td><td>Helps a browser discover its public address behind NAT (<code>stun:stun.l.google.com:19302</code>).</td></tr>
+  <tr><td><b>RTCPeerConnection</b></td><td>The browser object that manages the P2P media connection.</td></tr>
+</table>
+
+<h3>5.2 End-to-end call flow (1:1)</h3>
+<div class="flow">
+  <b>1. Ring</b> — caller invokes <code>StartCall(callId, [calleeId], "video", false)</code>. The hub sends
+  <code>CallRinging</code> to the callee's personal group. The callee's device shows a banner and plays a ringtone.<br>
+  <b>2. Answer</b> — callee accepts and navigates to the call screen; both call <code>JoinCall(callId)</code>.<br>
+  <b>3. Discover peers</b> — the hub replies to the newcomer with <code>ExistingParticipants</code> and tells the
+  others <code>ParticipantJoined</code>. The newcomer creates an <b>offer</b> to each existing peer.<br>
+  <b>4. Exchange SDP</b> — offer <span class="arrow">→</span> <code>SendSdpOffer</code> relayed to the target; the target
+  sets it, creates an <b>answer</b>, relays it back via <code>SendSdpAnswer</code>.<br>
+  <b>5. Exchange ICE</b> — as candidates are gathered they are relayed with <code>SendIceCandidate</code>. Candidates
+  arriving before the remote description is set are <b>buffered</b>, then flushed.<br>
+  <b>6. Connected</b> — once a peer connection reports <code>connected</code>, audio/video flow directly, P2P.
+</div>
+
+<h3>5.3 Server: pure relay, tagged with the sender</h3>
+<pre><code>// VideoCallHub.cs — ring, then relay SDP/ICE to a specific user
+public async Task StartCall(string callId, string[] inviteeIds, string mediaType, bool isGroup) {
+    foreach (var id in inviteeIds)
+        await Clients.Group(id).SendAsync("CallRinging", callId, Uid, mediaType, isGroup);
+    // ... best-effort call-history persistence ...
+}
+
+public async Task JoinCall(string callId) {
+    var members = _rooms.GetOrAdd(callId, _ =&gt; new());
+    var existing = members.Values.Where(u =&gt; u != Uid).Distinct().ToArray();
+    members[Context.ConnectionId] = Uid;
+    await Groups.AddToGroupAsync(Context.ConnectionId, callId);
+    await Clients.Caller.SendAsync("ExistingParticipants", existing);      // newcomer offers to each
+    await Clients.OthersInGroup(callId).SendAsync("ParticipantJoined", Uid);
+}
+
+// SDP/ICE are relayed to one user and tagged with the sender (Uid) + callId
+public Task SendSdpOffer(string callId, string targetUserId, string sdp) =&gt;
+    Clients.Group(targetUserId).SendAsync("SdpOfferReceived", callId, sdp, Uid);
+public Task SendIceCandidate(string callId, string targetUserId, string candidate) =&gt;
+    Clients.Group(targetUserId).SendAsync("IceCandidateReceived", callId, candidate, Uid);</code></pre>
+
+<h3>5.4 Client: building the peer connection (mesh)</h3>
+<pre><code>// video-call.component.ts — one RTCPeerConnection per remote peer
+private ensurePeer(userId: string): PeerConn {
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  this.localStream?.getTracks().forEach(track =&gt; pc.addTrack(track, this.localStream!));
+  pc.ontrack = e =&gt; this.showRemoteStream(userId, e.streams[0]);
+  pc.onicecandidate = e =&gt; { if (e.candidate) this.hub.sendIceCandidate(this.callId, userId, e.candidate.toJSON()); };
+  return { pc, pendingCandidates: [], remoteSet: false };
+}
+
+private async makeOffer(userId: string) {
+  const { pc } = this.ensurePeer(userId);
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  this.hub.sendSdpOffer(this.callId, userId, offer);
+}
+
+private async handleOffer(userId: string, sdp: RTCSessionDescriptionInit) {
+  const entry = this.ensurePeer(userId);
+  await entry.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+  entry.remoteSet = true; await this.flush(userId);        // apply buffered ICE
+  const answer = await entry.pc.createAnswer();
+  await entry.pc.setLocalDescription(answer);
+  this.hub.sendSdpAnswer(this.callId, userId, answer);
+}
+
+private async addIce(userId: string, candidate: RTCIceCandidateInit) {
+  const entry = this.ensurePeer(userId);
+  if (entry.remoteSet) await entry.pc.addIceCandidate(new RTCIceCandidate(candidate));
+  else entry.pendingCandidates.push(candidate);            // buffer until remote description is set
+}</code></pre>
+<div class="box"><b>Why buffer ICE?</b> ICE candidates can arrive before the SDP answer/offer is applied. Adding a
+candidate before <code>setRemoteDescription</code> throws, so early candidates are queued and flushed once
+the remote description is set — this is the single most common source of "call connects but no media" bugs.</div>
+
+<h2 id="ring" class="pagebreak">6. Ringtone, Call-End Sync &amp; Noise Cancellation</h2>
+
+<h3>6.1 Ringtone on the callee's device</h3>
+<p>The callee's <code>CallService</code> starts a looping ringtone the moment <code>CallRinging</code>
+arrives. It is generated with the <b>Web Audio API</b> (no audio file needed, so no asset/CSP dependency)
+and stops on accept, decline, or timeout.</p>
+<pre><code>// call.service.ts — two-tone ring generated with oscillators, looped every 3s
+private startRingtone(): void {
+  this.audioCtx = this.audioCtx ?? new AudioContext();
+  const burst = () =&gt; { tone(480, 0); tone(440, 0.5); };   // classic ring cadence
+  burst();
+  this.ringInterval = setInterval(burst, 3000);
+  this.ringTimeout = setTimeout(() =&gt; {                    // missed call after 35s
+    const call = this.incomingCall();
+    if (call) this.hub.declineCall(call.callId, call.callerId);  // tell the caller too
+    this.stopRingtone(); this.incomingCall.set(null);
+  }, 35000);
+}</code></pre>
+
+<h3>6.2 Ending the call on BOTH sides</h3>
+<div class="flow">
+  <b>Decline</b> — callee taps decline <span class="arrow">→</span> <code>DeclineCall</code> <span class="arrow">→</span>
+  <code>CallDeclined</code> to the caller <span class="arrow">→</span> caller's screen ends.<br>
+  <b>No answer</b> — the ring times out (35s) and sends the same <code>DeclineCall</code>, so the caller ends too.<br>
+  <b>Safety net</b> — the caller's call screen also self-ends after 45s if it never connects (callee offline).
+</div>
+<pre><code>// video-call.component.ts
+this.hub.callDeclined$.subscribe(({ callId }) =&gt; {
+  if (callId === this.callId &amp;&amp; !this.isGroup() &amp;&amp; this.conns.size === 0) this.endLocally();
+});
+// caller-side no-answer fallback
+if (!this.isGroup())
+  this.noAnswerTimer = setTimeout(() =&gt; { if (this.callStatus() === 'connecting') this.endLocally(); }, 45000);</code></pre>
+
+<h3>6.3 Noise cancellation</h3>
+<p>Audio is captured with the browser's built-in DSP enabled — echo cancellation, noise suppression and
+automatic gain control — instead of a bare <code>audio: true</code>.</p>
+<pre><code>// video-call.component.ts — initLocalMedia()
+const constraints = {
+  video: this.isVideoCall(),
+  audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+};
+this.localStream = await navigator.mediaDevices.getUserMedia(constraints);</code></pre>
+
+<h2 id="client" class="pagebreak">7. Client Wiring Summary</h2>
+<table>
+  <tr><th>Server event (SignalR)</th><th>Client handler</th><th>Effect</th></tr>
+  <tr><td><code>ReceiveMessage</code></td><td><code>chatHub.message$</code></td><td>Append to open chat (dedup by id), bump unread badge</td></tr>
+  <tr><td><code>UserOnline/UserOffline</code></td><td><code>chatHub.userOnline$</code></td><td>Update presence dots + last-seen</td></tr>
+  <tr><td><code>UserTyping</code></td><td><code>chatHub.userTyping$</code></td><td>Show "typing…" indicator</td></tr>
+  <tr><td><code>MessageDelivered/Read</code></td><td><code>chatHub.message*$</code></td><td>Update ✓ / ✓✓ ticks</td></tr>
+  <tr><td><code>ReceiveNotification</code></td><td><code>notification service</code></td><td>Prepend to feed, increment count</td></tr>
+  <tr><td><code>CallRinging</code></td><td><code>callSvc.incomingCall</code></td><td>Show banner + play ringtone</td></tr>
+  <tr><td><code>SdpOffer/Answer/Ice…Received</code></td><td>video-call component</td><td>Drive the WebRTC handshake</td></tr>
+  <tr><td><code>ParticipantJoined/Left</code></td><td>video-call component</td><td>Add/remove a remote video tile</td></tr>
+</table>
+
+<div class="box">
+  <b>In one sentence:</b> SignalR keeps a JWT-authenticated socket open per user; the server pushes
+  chat and notifications straight into per-user/per-room groups, and for calls it only brokers the
+  WebRTC handshake so audio and video can flow directly between the two browsers.
+</div>
+
+<p class="cap" style="margin-top:26px">LinkUp — Connect. Share. Chat. · Realtime architecture reference · generated from the source.</p>
+
+</body>
+</html>
